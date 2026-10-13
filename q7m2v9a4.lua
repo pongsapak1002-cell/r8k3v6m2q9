@@ -69,6 +69,17 @@ local SetTraitProtectedRE = TraitRE and TraitRE:FindFirstChild("SetTraitProtecte
 local TraitsModule = {}
 pcall(function() TraitsModule = require(RS.Framework.Features.Traits.Traits) end)
 
+-- Quirk reroll remotes and definitions; one table keeps the top-level local count low.
+local Quirk = {Defs = {}}
+do
+    local re = network:FindFirstChild("QuirkService")
+    re = re and re:FindFirstChild("RE")
+    Quirk.RollRE = re and re:FindFirstChild("Roll")
+    Quirk.SetProtectedRE = re and re:FindFirstChild("SetQuirkProtected")
+    pcall(function() Quirk.Defs = require(RS.Framework.Features.Quirks.Quirks) end)
+    pcall(function() Quirk.Util = require(RS.Framework.Features.Quirks.QuirkUtil) end)
+end
+
 -- Quest rewards (Daily and Weekly).
 local QuestNetwork = network:FindFirstChild("QuestService")
 local QuestRE = QuestNetwork and QuestNetwork:FindFirstChild("RE")
@@ -269,6 +280,13 @@ local State = {
     TraitRollDelay = 0.35,
     ProtectedTraits = {},
     ProtectRareTraits = true,
+
+    -- Quirk rerolls
+    AutoRerollQuirk = false,
+    TargetQuirkUnitKey = "",
+    TargetQuirk = "Tycoon",
+    QuirkRollDelay = 0.35,
+    ProtectedQuirks = {},
 
     -- Discord Webhook
     WebhookURL               = "",
@@ -663,6 +681,65 @@ local function rollTraitForSelectedUnit()
         return true, "Trait reroll requested."
     end)
     if not ok then return false, "Trait request failed: " .. tostring(success) end
+    return success, reason
+end
+
+-- Quirks follow the trait flow, but each roll costs money and buffs are compared per stat.
+function Quirk.meetsTarget(currentName, targetName)
+    if currentName == targetName then return true end
+    local current, target = Quirk.Defs[currentName], Quirk.Defs[targetName]
+    if not current or not target or not target.buffs or next(target.buffs) == nil then return false end
+    for stat, buff in pairs(target.buffs) do
+        local have = current.buffs and current.buffs[stat]
+        -- abs: Roll Duration buffs are negative, so a larger magnitude is better.
+        if not have or math.abs(have.amount) < math.abs(buff.amount) then return false end
+    end
+    return true
+end
+
+function Quirk.roll()
+    local ok, success, reason = pcall(function()
+        local unitKey = State.TargetQuirkUnitKey
+        if not Quirk.RollRE then return false, "Quirk service unavailable." end
+        if not unitKey or unitKey == "" then return false, "Select a unit first." end
+        if not Quirk.Defs[State.TargetQuirk] then return false, "Select a valid target quirk." end
+        local inv = DataController.Inventory
+        if not inv then return true, "Waiting for inventory." end
+        local getter = inv[unitKey]
+        local unit = getter and getter()
+        if not unit or not unit.attributes then return false, "Selected unit is no longer available." end
+        local currentQuirk = unit.attributes.quirk
+        if Quirk.meetsTarget(currentQuirk, State.TargetQuirk) then
+            Quirk.pending = nil
+            return false, "Target quirk reached."
+        end
+        local protectedGetter = currentQuirk and DataController.ProtectedQuirks
+            and DataController.ProtectedQuirks[currentQuirk]
+        if currentQuirk and (State.ProtectedQuirks[currentQuirk] == true
+            or (protectedGetter and protectedGetter() == true)) then
+            return false, "Current quirk is locked: " .. currentQuirk
+        end
+        local money = tonumber(DataController.Money()) or 0
+        local pending = Quirk.pending
+        if pending then
+            local previous = inv[pending.UnitKey]
+            previous = previous and previous()
+            local previousQuirk = previous and previous.attributes and previous.attributes.quirk
+            -- shortcut: income can hide the money drop, so a same-quirk reroll may wait the full 2s; track a roll counter if the game exposes one.
+            if money >= pending.Money and previousQuirk == pending.Quirk
+                and os.clock() - pending.SentAt < 2 then
+                return true, "Waiting for server confirmation."
+            end
+            Quirk.pending = nil
+        end
+        local cost = Quirk.Util and Quirk.Util.GetRollCost(unit.name, unit.attributes)
+        if type(cost) == "number" and money < cost then return false, "Not enough money to roll." end
+        -- One argument only: the game's second argument skips server protection.
+        Quirk.RollRE:FireServer(unitKey)
+        Quirk.pending = {UnitKey=unitKey, Money=money, Quirk=currentQuirk, SentAt=os.clock()}
+        return true, "Quirk reroll requested."
+    end)
+    if not ok then return false, "Quirk request failed: " .. tostring(success) end
     return success, reason
 end
 
@@ -1301,6 +1378,24 @@ task.spawn(function()
     end
 end)
 
+-- Quirk reroll worker, same stop behavior as Trait.
+task.spawn(function()
+    while isCurrentRun() do
+        task.wait(math.clamp(tonumber(State.QuirkRollDelay) or 0.35, 0.15, 1))
+        if not isCurrentRun() then break end
+        if State.AutoRerollQuirk then
+            local ok, reason = Quirk.roll()
+            if not ok then
+                State.AutoRerollQuirk = false
+                local ui = _G.AnimeDiceVaderUI
+                local toggle = ui and ui.Options and ui.Options.TogAutoRerollQuirk
+                if toggle then toggle:SetValue(false) end
+                if ui then ui:Notify({Title="Auto Quirk Reroll Stopped",Content=reason,Duration=3}) end
+            end
+        end
+    end
+end)
+
 -- Load VaderUI from GitHub.
 local VaderUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/DONUT6599/ddgdhdf/refs/heads/main/VaderUI.lua"))()
 _G.AnimeDiceVaderUI = VaderUI
@@ -1350,6 +1445,7 @@ local Tabs = {
     AutoSell = Window:AddTab({Title = "Auto Sell"}),
     Grades   = Window:AddTab({Title = "Grades"}),
     Traits   = Window:AddTab({Title = "Traits"}),
+    Quirks   = Window:AddTab({Title = "Quirks"}),
     Upgrades = Window:AddTab({Title = "Upgrades & Dice"}),
     Webhook  = Window:AddTab({Title = "Webhook"}),
     Settings = Window:AddTab({Title = "Settings"}),
@@ -2084,6 +2180,80 @@ for _, name in ipairs(traitTargetOptions) do
     end
 end
 
+-- Quirks UI mirrors Traits, using the game's live quirk definitions.
+do
+    Quirk.labels, Quirk.unitIdMap = getInventoryUnitOptions("quirk")
+    if Quirk.unitIdMap[Quirk.labels[1]] then
+        State.TargetQuirkUnitKey = Quirk.unitIdMap[Quirk.labels[1]]
+    end
+    Quirk.targetOptions = {}
+    for name in pairs(Quirk.Defs) do table.insert(Quirk.targetOptions, name) end
+    table.sort(Quirk.targetOptions, function(a,b) return Quirk.Defs[a].order < Quirk.Defs[b].order end)
+
+    local secQuirk = Tabs.Quirks:AddSection("Auto Reroll")
+    secQuirk:AddParagraph({Title="Quirk Guide",
+        Content="Each roll costs money. Stop at the target or stronger buffs of the same type. Locked quirks are kept. Quirks only apply while the unit is on a podium."})
+    local dropQuirkUnitRef = secQuirk:AddDropdown("DropQuirkUnit", {
+        Title="Select Unit", Description="Choose an inventory unit to reroll.",
+        Values=Quirk.labels, Default=Quirk.labels[1],
+        Callback=function(label)
+            State.TargetQuirkUnitKey = Quirk.unitIdMap[label] or ""
+        end
+    })
+    secQuirk:AddButton({Title="Refresh Units",Description="Refresh inventory units and their quirks.",
+        Callback=function()
+            Quirk.labels, Quirk.unitIdMap = getInventoryUnitOptions("quirk")
+            dropQuirkUnitRef:SetValues(Quirk.labels)
+            local selected = nil
+            for label,key in pairs(Quirk.unitIdMap) do
+                if key == State.TargetQuirkUnitKey then selected=label;break end
+            end
+            dropQuirkUnitRef:SetValue(selected)
+            if not selected then
+                State.TargetQuirkUnitKey=""
+                local toggle=VaderUI.Options.TogAutoRerollQuirk
+                if toggle then toggle:SetValue(false) end
+            end
+            VaderUI:Notify({Title="Vader Script",Content="Quirk unit list refreshed.",Duration=2})
+        end})
+    secQuirk:AddDropdown("DropTargetQuirk",{Title="Target Quirk",
+        Description="Stop at this quirk or stronger buffs of the same type.",
+        Values=Quirk.targetOptions,Default=State.TargetQuirk,
+        Callback=function(value) if Quirk.Defs[value] then State.TargetQuirk=value end end})
+    secQuirk:AddSlider("SlideQuirkDelay",{Title="Reroll Interval (seconds)",
+        Description="Time between quirk reroll checks.",Min=0.15,Max=1,Default=State.QuirkRollDelay,Rounding=2,
+        Callback=function(value) State.QuirkRollDelay=value end})
+    secQuirk:AddToggle("TogAutoRerollQuirk",{Title="Auto Reroll",
+        Description="Reroll until the target is reached, a locked quirk is found, or money runs out.",Default=false,
+        Callback=function(value)
+            State.AutoRerollQuirk=value
+            VaderUI:Notify({Title="Vader Script",Content=value and "Auto Quirk Reroll enabled." or "Auto Quirk Reroll disabled.",Duration=2})
+        end})
+    local secQuirkManual=Tabs.Quirks:AddSection("Manual Reroll")
+    secQuirkManual:AddButton({Title="Reroll 1x",Description="Reroll the selected unit once.",
+        Callback=function()
+            local ok,reason=Quirk.roll()
+            VaderUI:Notify({Title=ok and "Quirk Reroll" or "Quirk Reroll Stopped",Content=reason,Duration=3})
+        end})
+    local secQuirkLocks=Tabs.Quirks:AddSection("Server Lock")
+    for _, name in ipairs(Quirk.targetOptions) do
+        if Quirk.Defs[name].weight < 100 then
+            local getter=DataController.ProtectedQuirks and DataController.ProtectedQuirks[name]
+            local locked=getter and getter() == true or false
+            State.ProtectedQuirks[name]=locked
+            secQuirkLocks:AddToggle("TogQuirkProt_"..name,{Title="Lock Quirk "..name,
+                Description="Stop rerolling when this quirk is found.",Default=locked,
+                Callback=function(value)
+                    State.ProtectedQuirks[name]=value
+                    local currentGetter=DataController.ProtectedQuirks and DataController.ProtectedQuirks[name]
+                    if Quirk.SetProtectedRE and (not currentGetter or currentGetter() ~= value) then
+                        Quirk.SetProtectedRE:FireServer(name,value)
+                    end
+                end})
+        end
+    end
+end
+
 local secUpgrades = Tabs.Upgrades:AddSection("Upgrades")
 
 secUpgrades:AddToggle("TogAutoUpgrades", {
@@ -2558,6 +2728,23 @@ local function loadConfigFile(configName)
             if lock then lock:SetValue(State.ProtectedTraits[name] == true) end
         end
         if opt.TogAutoRerollTrait then opt.TogAutoRerollTrait:SetValue(State.AutoRerollTrait) end
+
+        -- Quirks: restore selection and locks before enabling rerolls.
+        if opt.DropQuirkUnit then
+            local selected=nil
+            for label,key in pairs(Quirk.unitIdMap) do
+                if key == State.TargetQuirkUnitKey then selected=label;break end
+            end
+            opt.DropQuirkUnit:SetValue(selected)
+            if not selected then State.TargetQuirkUnitKey="";State.AutoRerollQuirk=false end
+        end
+        if opt.DropTargetQuirk then opt.DropTargetQuirk:SetValue(State.TargetQuirk) end
+        if opt.SlideQuirkDelay then opt.SlideQuirkDelay:SetValue(State.QuirkRollDelay) end
+        for _,name in ipairs(Quirk.targetOptions) do
+            local lock=opt["TogQuirkProt_"..name]
+            if lock then lock:SetValue(State.ProtectedQuirks[name] == true) end
+        end
+        if opt.TogAutoRerollQuirk then opt.TogAutoRerollQuirk:SetValue(State.AutoRerollQuirk) end
 
         -- Upgrades Tab
         if opt.TogAutoUpgrades then opt.TogAutoUpgrades:SetValue(State.AutoUpgrades) end
