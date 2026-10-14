@@ -1861,11 +1861,37 @@ end
 local okSpeedConfig, SpeedConfig = pcall(function()
     return require(game:GetService("ReplicatedStorage").Shared.SpeedConfig)
 end)
+local MAX_MULT, MIN_MULT = 1.6, 1
+local speedMult, lastPull, lastWalk = MAX_MULT, os.clock(), 0
 local function safeSpeed()
+    lastWalk = os.clock()
     local ok, walk = pcall(function()
         return SpeedConfig.SpeedPowerToWalkSpeed(LocalPlayer:GetAttribute("SpeedPower"))
     end)
-    return (okSpeedConfig and ok and type(walk) == "number" and walk or 26) * 1.6
+    return (okSpeedConfig and ok and type(walk) == "number" and walk or 26) * speedMult
+end
+
+-- Pulled back by the server: drop the multiplier 0.1. A minute without a pull-back: climb 0.1 back up.
+do
+    local lastPos, lastChar
+    track(RunService.Heartbeat:Connect(function()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            lastPos = nil
+            return
+        end
+        local now = os.clock()
+        -- the walk loops never move more than ~8 studs a frame, so a 25-stud jump mid-walk is the server
+        if char == lastChar and lastPos and now - lastWalk < 0.3 and (hrp.Position - lastPos).Magnitude > 25 then
+            speedMult = math.max(speedMult - 0.1, MIN_MULT)
+            lastPull = now
+        elseif speedMult < MAX_MULT and now - lastPull > 60 then
+            speedMult = math.min(speedMult + 0.1, MAX_MULT)
+            lastPull = now
+        end
+        lastPos, lastChar = hrp.Position, char
+    end))
 end
 
 local function Toggle(page, title, enabled, callback, _, desc)
