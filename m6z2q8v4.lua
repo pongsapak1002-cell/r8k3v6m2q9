@@ -1926,6 +1926,22 @@ local function BuildAutoFarm()
 	local Page = CreatePage("Farm")
 	CreateTab("Farm", "124620632231839")
 
+	-- same request as the game's own "Equip Best" button in the pets inventory
+	local equipBest = false
+	Section(Page, "Pets")
+	Toggle(Page, "Auto Equip Best", false, function(on)
+		equipBest = on
+	end)
+	task.spawn(function()
+		while not closed do
+			local remote = equipBest and ReplicatedStorage:FindFirstChild("PetsInventoryRemote")
+			if remote then
+				remote:FireServer("EquipBest")
+			end
+			task.wait(5)
+		end
+	end)
+
 	local BREAK_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial" }
 	local STEAL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial", "Inferno", "Void", "Omega" }
 	local RANK = {}
