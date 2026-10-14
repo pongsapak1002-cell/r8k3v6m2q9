@@ -1865,7 +1865,7 @@ local function safeSpeed()
     local ok, walk = pcall(function()
         return SpeedConfig.SpeedPowerToWalkSpeed(LocalPlayer:GetAttribute("SpeedPower"))
     end)
-    return (okSpeedConfig and ok and type(walk) == "number" and walk or 26) * 1.7
+    return (okSpeedConfig and ok and type(walk) == "number" and walk or 26) * 1.6
 end
 
 local function Toggle(page, title, enabled, callback, _, desc)
