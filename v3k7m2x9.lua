@@ -7650,6 +7650,25 @@ do
         VaderUI.MinimizeKeybind = minimizeKey
         Theme:AddButton({ Title = "Unload UI", Callback = function() VaderUI:Destroy() end })
 
+        local AFK = Settings:AddSection("Anti-AFK")
+        local antiAFK = lib.Persist("VaderAntiAFK", true)
+        AFK:AddToggle(nil, {
+            Title = "Anti-AFK", Default = antiAFK,
+            Description = "Prevent idle disconnections while the UI is open.",
+            Callback = function(value)
+                antiAFK = value
+                lib.Save("VaderAntiAFK", value)
+            end,
+        })
+        lib:GiveSignal(game:GetService("Players").LocalPlayer.Idled:Connect(function()
+            if lib.Unloaded or not antiAFK then return end
+            pcall(function()
+                local virtualUser = game:GetService("VirtualUser")
+                virtualUser:CaptureController()
+                virtualUser:ClickButton2(Vector2.new())
+            end)
+        end))
+
         local Community = Settings:AddSection("Community & Support")
         Community:AddParagraph({
             Title = "Vader Script Official Discord",
