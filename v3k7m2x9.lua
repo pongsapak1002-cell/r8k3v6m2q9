@@ -10,9 +10,24 @@ do
     -- a re-run removes the old UI right away and takes over from any run still starting
     local Token = {}
     Boot.VaderFishBoot = Token
+    local setIdentity = setthreadidentity or set_thread_identity or setidentity
     if type(Boot.VaderUI_Instance) == "table" and Boot.VaderUI_Instance.Destroy then
         pcall(Boot.VaderUI_Instance.Destroy, Boot.VaderUI_Instance)
     end
+    -- also by name: an old copy whose reference was lost (other version, other loader env, or an unload that ran
+    -- without the rights to touch CoreGui) still goes away
+    if setIdentity then
+        pcall(setIdentity, 8)
+    end
+    local function sweep(parent)
+        for _, g in ipairs(parent:GetDescendants()) do
+            if g:IsA("ScreenGui") and g.Name == "VaderUI" then
+                pcall(g.Destroy, g)
+            end
+        end
+    end
+    pcall(function() sweep(game:GetService("CoreGui")) end)
+    pcall(function() sweep(game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")) end)
     if not game:IsLoaded() then
         game.Loaded:Wait()
     end
@@ -2372,6 +2387,17 @@ local function Vader_MakeLibrary()
             return
         end
         Library.Unloaded = true
+        -- a thread started from a click or a game signal lacks the rights to touch CoreGui; restore them and remove the
+        -- UI first, before the unload callbacks can drop them again
+        local setIdentity = setthreadidentity or set_thread_identity or setidentity
+        if setIdentity then
+            pcall(setIdentity, 8)
+        end
+        local gui = VUI.GUI
+        pcall(destroyUI, VUI)
+        if gui then
+            pcall(gui.Destroy, gui)
+        end
         for _, fn in ipairs(UnloadCbs) do
             pcall(fn)
         end
@@ -2380,7 +2406,6 @@ local function Vader_MakeLibrary()
                 c:Disconnect()
             end)
         end
-        destroyUI(VUI)
     end
     -- the close button and a re-execute both go through VUI:Destroy
     function VUI:Destroy()
