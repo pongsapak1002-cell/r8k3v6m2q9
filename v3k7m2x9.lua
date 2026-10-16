@@ -3454,11 +3454,7 @@ do
 		return "Fast" -- forced; the danger fallback below still switches to the game's auto fishing
 	end
 	function N.fishMode()
-		local c = modeChoice()
-		if c == "Legi" or os.clock() < F.fallbackUntil or os.clock() < L.dayOffUntil then
-			return "safe"
-		end
-		return "blatant"
+		return "blatant" -- Fast only, no fallback to the game's auto fishing
 	end
 	-- No ladder (owner 2026-10-06): the planner always fishes in the fastest mode that works; Safe only after a danger signal.
 	function N.ladderTick() end
@@ -3476,7 +3472,11 @@ do
 		return "Fishing at full speed"
 	end
 	function N.fallback(reason)
-		if os.clock() < F.fallbackUntil then
+		-- Fast only: a danger signal is logged, fishing stays on Fast
+		if N.due("fallbackLog", 60) then
+			log("MODE danger signal ignored (Fast only)", "reason=" .. tostring(reason))
+		end
+		do
 			return
 		end
 		local now = os.clock()
@@ -4183,6 +4183,11 @@ do
 			end
 		end
 		if (N.data().World and N.worldCfg() and N.worldCfg().NoFishing) then
+			if N.World.manual == N.worldKey() then
+				setStatus("Staying in " .. N.worldKey() .. " (you teleported here)")
+				task.wait(2)
+				return
+			end
 			setStatus("In a world without fishing, going back")
 			N.travel(N.bestFishingWorld())
 			return
@@ -4252,8 +4257,8 @@ do
 		end
 		-- The game's own auto fishing (saved ON in the profile, or left on by an earlier Legit/fallback phase) casts with the
 		-- full catch animation next to ours: switch it off once, found even when the hub never patched it.
-		if not F.afOffChecked then
-			F.afOffChecked = true
+		-- checked before every cast: the game turns its saved Auto back on after a respawn, a world change or a trip
+		do
 			local AF = findAutoFishing()
 			if AF and AF.On then
 				pcall(AF.SetOn, AF, false)
@@ -5371,11 +5376,58 @@ do
 		if not key or N.worldKey() == key then
 			return true
 		end
+		-- the player teleported here from the Teleport tab: automatic trips stay put until the player teleports again
+		if N.World.manual and N.World.manual == N.worldKey() and not N.World.tpBusy then
+			if N.due("manualStay", 60) then
+				log("WORLD stay", "in " .. tostring(N.World.manual), "skipped a trip to " .. tostring(key))
+			end
+			return false
+		end
 		if N.due("cutsceneOff", 3600) then
 			send("Settings", "TeleportCutscene", false)
 		end
 		N.pauseFishing("travel to " .. tostring(key))
 		setStatus("Travelling to " .. tostring(key))
+		-- like the game's Teleport window: its Cutscene controller loads the new map and moves the character; the remote
+		-- alone only changes the saved world
+		if N.Cutscene == nil then
+			N.Cutscene = false
+			pcall(function()
+				local mod = LocalPlayer.PlayerScripts.Client.Controllers.Cutscene
+				local c = require(mod)
+				if type(c) == "table" and type(c.Play) == "function" then
+					N.Cutscene = c
+				end
+			end)
+		end
+		if N.Cutscene then
+			-- run it at the game's own identity: at the executor's, the world-ready callbacks cannot require the game's
+			-- modules, the travel never ends and the iris stays black
+			local setId = setthreadidentity or set_thread_identity or setidentity
+			local getId = getthreadidentity or get_thread_identity or getidentity
+			local before = getId and getId() or 8
+			if setId then
+				pcall(setId, 2)
+			end
+			local ok, err = pcall(N.Cutscene.Play, N.Cutscene, key)
+			if setId then
+				pcall(setId, before)
+			end
+			if not ok then
+				log("WORLD cutscene failed", tostring(err))
+			end
+			-- never leave the screen black: lift the game's iris if its travel is still running after 15 s
+			local cut = N.Cutscene
+			task.delay(15, function()
+				if cut.Token ~= nil and cut.World == key then
+					pcall(function()
+						cut.Modules.UI.Iris:Out()
+						cut:ShowPrompts()
+					end)
+					log("WORLD iris lifted", tostring(key))
+				end
+			end)
+		end
 		send("Teleport", key)
 		local ok = waitFor(function()
 			return N.worldKey() == key
@@ -5584,35 +5636,51 @@ do
 			end
 			return false
 		end
-		-- Plain toggles: cheapest affordable upgrade, the strongest affordable rod, the next world when open.
+		-- Plain toggles: cheapest affordable upgrade, the strongest affordable rod, the next world when open. Buys back to
+		-- back while the cash lasts (up to 15 in one go) instead of one purchase per cast.
 		P.need = nil
-		local cheapest
-		for _, c in ipairs(list) do
-			if N.cash() >= c.price and (c.kind ~= "rod" or on("AutoRods")) then
-				if c.kind == "world" and (on("AutoWorlds") or (c.name == "Pond" and on("AutoPond"))) then
-					return N.buy(c, "plain")
-				end
-				if c.kind == "upgrade" and on("AutoUpgrades") and (not cheapest or c.price < cheapest.price) then
-					cheapest = c
-				end
-			end
-		end
-		if on("AutoRods") then
-			local bestRod
-			for _, c in ipairs(list) do
-				if c.kind == "rod" and N.cash() >= c.price and (not bestRod or c.frac > bestRod.frac) then
-					bestRod = c
+		local function plainOnce(cands)
+			local cheapest
+			for _, c in ipairs(cands) do
+				if N.cash() >= c.price and (c.kind ~= "rod" or on("AutoRods")) then
+					if c.kind == "world" and (on("AutoWorlds") or (c.name == "Pond" and on("AutoPond"))) then
+						return N.buy(c, "plain"), true
+					end
+					if c.kind == "upgrade" and on("AutoUpgrades") and (not cheapest or c.price < cheapest.price) then
+						cheapest = c
+					end
 				end
 			end
-			if bestRod and N.buy(bestRod, "plain") then
-				N.equipBestRod()
-				return true
+			if on("AutoRods") then
+				local bestRod
+				for _, c in ipairs(cands) do
+					if c.kind == "rod" and N.cash() >= c.price and (not bestRod or c.frac > bestRod.frac) then
+						bestRod = c
+					end
+				end
+				if bestRod and N.buy(bestRod, "plain") then
+					N.equipBestRod()
+					return true
+				end
 			end
+			if cheapest then
+				return N.buy(cheapest, "plain")
+			end
+			return false
 		end
-		if cheapest then
-			return N.buy(cheapest, "plain")
+		local bought = 0
+		for i = 1, 15 do
+			local ok, world = plainOnce(if i == 1 then list else N.candidates())
+			if not ok then
+				break
+			end
+			bought += 1
+			if world then
+				break
+			end
+			task.wait(0.25)
 		end
-		return false
+		return bought > 0
 	end
 	-- Go fishing in the best unlocked world (Auto Worlds / planner).
 	function N.worldStep()
@@ -5621,6 +5689,9 @@ do
 		end
 		local best = N.bestFishingWorld()
 		local cur = N.worldKey()
+		if N.World.manual == cur then
+			return false
+		end
 		if best ~= cur and not (N.worldCfg(cur) and N.worldCfg(cur).NoFishing and N.Pond.busy) then
 			return N.travel(best)
 		end
@@ -5908,7 +5979,7 @@ do
 		end)(), formatNumber(hourly))
 		log("POND trip", N.Pond.last)
 		N.Pond.busy = false
-		N.travel(back ~= "Pond" and back or N.bestFishingWorld())
+		N.travel(if back ~= "Pond" or N.World.manual == "Pond" then back else N.bestFishingWorld())
 		return true
 	end
 	-- Pets: equip the strongest pet (rarity, then shiny, then level) from anywhere; eggs need the own pond world, the egg
@@ -6010,7 +6081,7 @@ do
 			task.wait(1)
 		end
 		log("PET hatchery", "hatched=" .. hatched, "placed=" .. placedNow)
-		N.travel(back ~= "Pond" and back or N.bestFishingWorld())
+		N.travel(if back ~= "Pond" or N.World.manual == "Pond" then back else N.bestFishingWorld())
 		return hatched + placedNow > 0
 	end
 	-- Cargo (task board): give each order slot from the inventory (the server picks the cheapest unlocked match, Keep
@@ -6257,6 +6328,7 @@ do
 	Tabs.Upgrades = N.addTab("Upgrades", "trending-up", "Upgrades, rods and worlds")
 	Tabs.Rewards = N.addTab("Rewards", "gift", "Daily, playtime, season, achievements, codes and the Big Mouth")
 	Tabs.Items = N.addTab("Items", "backpack", "Chests, potions, relics, enchants and mutations")
+	Tabs.Teleport = N.addTab("Teleport", "map", "Islands")
 	Tabs.Stats = N.addTab("Stats", "chart-column", "Session progress and rates")
 	Tabs.Webhook = N.addTab("Webhook", "webhook", "Discord posts")
 	Tabs.Misc = Window:AddMiscTab({ Description = "Performance, AFK and connection" })
@@ -6465,6 +6537,40 @@ do
 		local CargoBox = Tabs.Items:AddLeftGroupbox("Cargo", "ship")
 		CargoBox:AddToggle("AutoCargo", { Text = "Auto Cargo", Default = false })
 		Labels.Items = { SetText = function() end }
+	end
+	-- Teleport: the game's own Teleport remote (N.travel), the same as its Teleport window. A locked island the level
+	-- allows is bought with its unlock price on the first visit, exactly like the window's price button.
+	do
+		local TpBox = Tabs.Teleport:AddLeftGroupbox("Islands", "map")
+		for _, w in ipairs({ { "Pond", "Pond" }, { "World 1", "Fernshore" }, { "World 2", "Dunehaven" }, { "World 3", "Frostmere" }, { "World 4", "Emberdeep" } }) do
+			local key, name = w[1], w[2]
+			local cfg = N.worldCfg(key) or {}
+			local req = tonumber(cfg.RequiredLevel) or 1
+			local price = tonumber(cfg.UnlockPrice) or 0
+			TpBox:AddButton({
+				Text = string.format("%s (Lv %d%s)", name, req, if price > 0 then ", " .. formatNumber(price) else ""),
+				Func = function()
+					if N.World.tpBusy then
+						notify("Teleport", "Already teleporting, wait a moment", 2)
+					elseif N.worldKey() == key then
+						N.World.manual = key
+						notify("Teleport", "You are already in " .. name, 3)
+					elseif N.level() < req then
+						notify("Teleport", string.format("%s needs level %d (you are %d)", name, req, N.level()), 4)
+					elseif not N.unlocked(key) and N.cash() < price then
+						notify("Teleport", string.format("%s costs %s to unlock (you have %s)", name, formatNumber(price), formatNumber(N.cash())), 4)
+					else
+						N.World.tpBusy = true
+						-- the hub stays where the player sent it: Auto Worlds and the no-fishing check stop pulling back
+						N.World.manual = key
+						notify("Teleport", "Teleporting to " .. name .. "...", 3)
+						local ok = N.travel(key)
+						N.World.tpBusy = false
+						notify("Teleport", (if ok then "Arrived in " else "Could not reach ") .. name, 3)
+					end
+				end,
+			})
+		end
 	end
 end
 N.StatRows = {}
