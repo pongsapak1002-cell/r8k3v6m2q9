@@ -1436,6 +1436,187 @@ function VaderUI:Destroy()
 end
 _G.AnimeDiceWindow = VaderUI
 
+-- getgenv().TH = true before running switches the UI to Thai by swapping label text as it appears.
+if ((getgenv and getgenv()) or _G).TH == true and VaderUI.GUI then
+    local TH = {
+        -- Tabs and sections
+        ["Main"] = "หลัก", ["Items & Boosts"] = "ไอเทมและบูสต์", ["Towers"] = "หอคอย", ["Plots"] = "แปลง",
+        ["Auto Sell"] = "ขายอัตโนมัติ", ["Grades"] = "เกรด", ["Traits"] = "เทรต", ["Quirks"] = "เควิร์ก",
+        ["Upgrades & Dice"] = "อัปเกรดและลูกเต๋า", ["Webhook"] = "เว็บฮุก", ["Settings"] = "ตั้งค่า",
+        ["Rolling"] = "ทอยลูกเต๋า", ["Rebirth & Claims"] = "รีเบิร์ธและรับรางวัล", ["Quests"] = "เควส",
+        ["Collect Balance"] = "เก็บเงิน", ["Auto Use Items"] = "ใช้ไอเทมอัตโนมัติ", ["Quick Actions"] = "คำสั่งด่วน",
+        ["Auto Tower"] = "ลงหอคอยอัตโนมัติ", ["Manual Controls"] = "ควบคุมเอง", ["Anime Units"] = "ยูนิต",
+        ["Level Up Units"] = "อัปเลเวลยูนิต", ["Inventory Sell"] = "ขายของในกระเป๋า", ["Safety Lock"] = "กันขายพลาด",
+        ["Manual Actions"] = "สั่งเอง", ["Auto Reroll"] = "สุ่มใหม่อัตโนมัติ", ["Manual Reroll"] = "สุ่มเอง",
+        ["Server Lock"] = "ล็อกบนเซิร์ฟเวอร์", ["Upgrades"] = "อัปเกรด", ["Dice Shop"] = "ร้านลูกเต๋า",
+        ["Discord Webhook Settings"] = "ตั้งค่าเว็บฮุกดิสคอร์ด", ["Event Alerts"] = "แจ้งเตือนเหตุการณ์",
+        ["Periodic Summary"] = "สรุปผลตามเวลา", ["Theme Settings"] = "ธีม", ["Anti-AFK"] = "กัน AFK",
+        ["Community & Support"] = "ชุมชนและช่วยเหลือ",
+        -- Main
+        ["Auto Roll"] = "ทอยอัตโนมัติ", ["Roll continuously at the server rate."] = "ทอยต่อเนื่องเร็วสุดที่เซิร์ฟให้",
+        ["Auto Rebirth"] = "รีเบิร์ธอัตโนมัติ", ["Rebirth as soon as you can afford the next level."] = "รีเบิร์ธทันทีที่เงินพอ",
+        ["Auto Claim"] = "รับรางวัลอัตโนมัติ", ["Claim daily, spin, and offline rewards."] = "รับรางวัลรายวัน วงล้อ และออฟไลน์",
+        ["Auto Claim Quests"] = "รับรางวัลเควสอัตโนมัติ",
+        ["Claim completed Daily and Weekly quest rewards automatically."] = "รับรางวัลเควสรายวันและรายสัปดาห์ที่ทำเสร็จ",
+        ["Auto Collect"] = "เก็บเงินอัตโนมัติ", ["Collect money from all slots every 0.5 seconds."] = "เก็บเงินทุกช่องทุก 0.5 วินาที",
+        ["Collect Now"] = "เก็บเงินตอนนี้", ["Collect money from all slots now."] = "เก็บเงินทุกช่องทันที",
+        -- Items
+        ["Use selected items and boosts from your inventory."] = "ใช้ไอเทมและบูสต์ที่เลือก",
+        ["Select Items"] = "เลือกไอเทม", ["Select one or more items to use."] = "เลือกไอเทมที่จะใช้",
+        ["Condition"] = "เงื่อนไข", ["Choose when to use items."] = "เลือกว่าจะใช้ตอนไหน",
+        ["Check Interval (seconds)"] = "เช็กทุก (วินาที)", ["Time between item checks."] = "ระยะห่างการเช็กไอเทม",
+        ["Select Owned"] = "เลือกที่มีทั้งหมด", ["Select every item currently in your inventory."] = "เลือกทุกไอเทมในกระเป๋า",
+        ["Clear All"] = "ล้างทั้งหมด", ["Deselect all items."] = "ยกเลิกการเลือกทั้งหมด",
+        ["Use Now"] = "ใช้ตอนนี้", ["Use each selected item once now."] = "ใช้ไอเทมที่เลือกอย่างละครั้ง",
+        -- Towers
+        ["Select Tower"] = "เลือกหอคอย", ["Choose a tower to farm."] = "เลือกหอคอยที่จะฟาร์ม",
+        ["Restart the tower after each win or loss."] = "เริ่มใหม่ทุกครั้งที่ชนะหรือแพ้",
+        ["Equip Best Team"] = "ใส่ทีมที่ดีที่สุด", ["Equip your best damage and health units."] = "ใส่ยูนิตดาเมจและเลือดดีสุด",
+        ["Hide Screen"] = "ซ่อนหน้าจอ", ["Hide the tower battle screen."] = "ซ่อนหน้าจอต่อสู้ในหอคอย",
+        ["Play Tower Now"] = "เข้าหอคอยตอนนี้", ["Start one run of the selected tower."] = "เล่นหอคอยที่เลือกหนึ่งรอบ",
+        ["Exit Tower"] = "ออกจากหอคอย", ["Leave the tower now."] = "ออกจากหอคอยทันที",
+        -- Plots
+        ["Auto Equip Best"] = "ใส่ยูนิตดีสุดอัตโนมัติ", ["Keep the best units equipped on your slots."] = "ใส่ยูนิตดีสุดในช่องเสมอ",
+        ["Equip Interval (seconds)"] = "เช็กทุก (วินาที)", ["Time between checks to equip the best units."] = "ระยะห่างการเช็กยูนิตดีสุด",
+        ["Equip Best Now"] = "ใส่ยูนิตดีสุดตอนนี้", ["Auto Level Up"] = "อัปเลเวลอัตโนมัติ",
+        ["Level up slotted units when affordable."] = "อัปเลเวลยูนิตในช่องเมื่อเงินพอ",
+        ["Preset Level"] = "เลเวลสำเร็จรูป", ["Choose the target unit level."] = "เลือกเลเวลเป้าหมาย",
+        ["Level Limit (10 - 150)"] = "เลเวลสูงสุด (10 - 150)", ["Set the maximum unit level."] = "ตั้งเลเวลสูงสุดของยูนิต",
+        ["Level Up Now"] = "อัปเลเวลตอนนี้", ["Upgrade slotted units once now."] = "อัปยูนิตในช่องหนึ่งครั้ง",
+        -- Auto Sell
+        ["Scan and sell units of the selected rarities."] = "ขายยูนิตระดับที่เลือก",
+        ["Sell Interval (seconds)"] = "ขายทุก (วินาที)", ["Time between inventory sales."] = "ระยะห่างการขาย",
+        ["Rarities"] = "ระดับความหายาก", ["Sell only units of the selected rarities."] = "ขายเฉพาะระดับที่เลือก",
+        ["Protect Equipped"] = "กันยูนิตที่ใส่อยู่", ["Keep units equipped on plots or tower teams."] = "ไม่ขายยูนิตบนแปลงหรือทีมหอคอย",
+        ["Protect Grade S and Above"] = "กันเกรด S ขึ้นไป",
+        ["Keep units with grades S, S+, Z, Z+, God, or Infinity."] = "ไม่ขายเกรด S, S+, Z, Z+, God, Infinity",
+        ["Protect Rare Traits"] = "กันเทรตหายาก",
+        ["Keep units with Samurai, Shogun, Monarch, Transcendent, Eternal, Paradox, or a locked trait."] = "ไม่ขายเทรตหายากหรือเทรตที่ล็อกไว้",
+        ["Protect Locked"] = "กันยูนิตที่ล็อก", ["Keep locked inventory units."] = "ไม่ขายยูนิตที่ล็อกไว้",
+        ["Sell Now"] = "ขายตอนนี้", ["Sell matching units now, up to 50 units."] = "ขายยูนิตที่ตรงเงื่อนไข สูงสุด 50 ตัว",
+        -- Grades / Traits / Quirks
+        ["Grade Guide"] = "วิธีใช้เกรด",
+        ["Each reroll costs 1 Gem. Stop at the target grade or when Gems run out."] = "สุ่มครั้งละ 1 เจม หยุดเมื่อถึงเป้าหรือเจมหมด",
+        ["Select Unit"] = "เลือกยูนิต", ["Choose an inventory unit to reroll."] = "เลือกยูนิตที่จะสุ่ม",
+        ["Refresh Units"] = "รีเฟรชยูนิต", ["Refresh inventory units and their grades."] = "อัปเดตรายชื่อยูนิต",
+        ["Refresh inventory units and their traits."] = "อัปเดตรายชื่อยูนิต",
+        ["Refresh inventory units and their quirks."] = "อัปเดตรายชื่อยูนิต",
+        ["Target Grade"] = "เกรดเป้าหมาย", ["Roll until this grade or higher."] = "สุ่มจนได้เกรดนี้หรือสูงกว่า",
+        ["Reroll Interval (seconds)"] = "สุ่มทุก (วินาที)",
+        ["Recommended: 0.25-0.40 seconds between rolls."] = "แนะนำ 0.25-0.40 วินาที",
+        ["Reroll until the unit reaches the target grade."] = "สุ่มจนถึงเกรดเป้าหมาย",
+        ["Reroll 1x"] = "สุ่ม 1 ครั้ง", ["Reroll the selected unit once for 1 Gem."] = "สุ่มหนึ่งครั้ง ใช้ 1 เจม",
+        ["Trait Guide"] = "วิธีใช้เทรต",
+        ["Each roll costs 1 Trait Reroll item. Stop at the target or stronger bonuses of the same type. Locked traits are kept."] = "สุ่มครั้งละ 1 ไอเทม Trait Reroll หยุดเมื่อได้เป้าหรือดีกว่า",
+        ["Target Trait"] = "เทรตเป้าหมาย", ["Stop at this trait or stronger bonuses of the same type."] = "หยุดเมื่อได้เทรตนี้หรือดีกว่า",
+        ["Time between trait reroll checks."] = "ระยะห่างการสุ่ม",
+        ["Reroll until the target is reached, a locked trait is found, or items run out."] = "สุ่มจนได้เป้า เจอเทรตที่ล็อก หรือไอเทมหมด",
+        ["Reroll the selected unit once for 1 Trait Reroll item."] = "สุ่มหนึ่งครั้ง ใช้ 1 ไอเทม",
+        ["Stop rerolling when this trait is found."] = "หยุดสุ่มเมื่อเจอเทรตนี้",
+        ["Quirk Guide"] = "วิธีใช้เควิร์ก",
+        ["Each roll costs money. Stop at the target or stronger buffs of the same type. Locked quirks are kept. Quirks only apply while the unit is on a podium."] = "สุ่มใช้เงิน หยุดเมื่อได้เป้าหรือดีกว่า มีผลเฉพาะยูนิตที่อยู่บนแท่น",
+        ["Target Quirk"] = "เควิร์กเป้าหมาย", ["Stop at this quirk or stronger buffs of the same type."] = "หยุดเมื่อได้เควิร์กนี้หรือดีกว่า",
+        ["Time between quirk reroll checks."] = "ระยะห่างการสุ่ม",
+        ["Reroll until the target is reached, a locked quirk is found, or money runs out."] = "สุ่มจนได้เป้า เจอเควิร์กที่ล็อก หรือเงินหมด",
+        ["Reroll the selected unit once."] = "สุ่มหนึ่งครั้ง", ["Stop rerolling when this quirk is found."] = "หยุดสุ่มเมื่อเจอเควิร์กนี้",
+        -- Upgrades & Dice
+        ["Auto Upgrades"] = "อัปเกรดอัตโนมัติ", ["Buy upgrades in selected categories when affordable."] = "ซื้ออัปเกรดหมวดที่เลือกเมื่อเงินพอ",
+        ["Focus Categories"] = "หมวดที่เน้น", ["Choose categories to purchase first."] = "เลือกหมวดที่จะซื้อก่อน",
+        ["Only Selected"] = "เฉพาะที่เลือก", ["Buy only upgrades in the selected categories."] = "ซื้อเฉพาะหมวดที่เลือก",
+        ["Buy Upgrades Now"] = "ซื้ออัปเกรดตอนนี้", ["Auto Buy Dice"] = "ซื้อลูกเต๋าอัตโนมัติ",
+        ["Buy unowned dice when affordable."] = "ซื้อลูกเต๋าที่ยังไม่มีเมื่อเงินพอ", ["Buy Available Dice"] = "ซื้อลูกเต๋าที่ซื้อได้",
+        -- Webhook
+        ["Discord Notifications"] = "แจ้งเตือนดิสคอร์ด",
+        ["Enter a Discord webhook URL for live roll alerts and statistics summaries."] = "ใส่ลิงก์เว็บฮุกเพื่อรับแจ้งเตือนและสรุปผล",
+        ["Discord Webhook URL"] = "ลิงก์เว็บฮุก", ["Paste your Discord webhook URL here."] = "วางลิงก์เว็บฮุกที่นี่",
+        ["Confirm URL"] = "ยืนยันลิงก์", ["Save and validate the URL; useful on mobile."] = "บันทึกและตรวจลิงก์ (สะดวกบนมือถือ)",
+        ["Paste Clipboard"] = "วางจากคลิปบอร์ด", ["Paste the URL from your clipboard."] = "วางลิงก์จากคลิปบอร์ด",
+        ["Enable"] = "เปิดใช้", ["Send notifications to Discord."] = "ส่งแจ้งเตือนไปดิสคอร์ด",
+        ["Test Webhook"] = "ทดสอบเว็บฮุก", ["Send a test message to Discord."] = "ส่งข้อความทดสอบ",
+        ["High Rolls"] = "ทอยได้ของดี", ["Report unit, grade, and trait details to Discord."] = "แจ้งยูนิต เกรด และเทรต",
+        ["Min Rarity"] = "ระดับขั้นต่ำ", ["Set the minimum rarity for notifications."] = "ระดับต่ำสุดที่จะแจ้ง",
+        ["Rebirth Alert"] = "แจ้งรีเบิร์ธ", ["Report new rebirth levels and bonuses."] = "แจ้งเลเวลรีเบิร์ธและโบนัส",
+        ["High Grade"] = "เกรดสูง", ["Report grades S, S+, Z, Z+, God, and Infinity."] = "แจ้งเกรด S ขึ้นไป",
+        ["Rare Trait"] = "เทรตหายาก", ["Report rare trait rerolls to Discord."] = "แจ้งเมื่อสุ่มได้เทรตหายาก",
+        ["Auto Summary"] = "สรุปผลอัตโนมัติ", ["Send scheduled cash, rebirth, and unit summaries."] = "ส่งสรุปเงิน รีเบิร์ธ และยูนิตตามเวลา",
+        ["Summary Interval (minutes)"] = "สรุปทุก (นาที)", ["Time between summaries: 5-60 minutes."] = "ระยะห่าง 5-60 นาที",
+        ["Send Summary Now"] = "ส่งสรุปตอนนี้", ["Send your current statistics to Discord now."] = "ส่งสถิติตอนนี้ไปดิสคอร์ด",
+        -- Settings
+        ["Theme"] = "ธีม", ["Show / Hide Key"] = "ปุ่มเปิด/ปิด UI", ["Unload UI"] = "ปิดสคริปต์",
+        ["Save your profile, stop automation, and close the UI."] = "บันทึก หยุดทุกอย่าง แล้วปิด UI",
+        ["Prevent idle disconnections."] = "กันโดนเตะเพราะยืนนิ่ง", ["Copy Discord Invite"] = "คัดลอกลิงก์ดิสคอร์ด",
+        ["Copy the Discord invite to your clipboard."] = "คัดลอกลิงก์เชิญดิสคอร์ด",
+        ["Vader updates, support and community.\nDiscord: https://discord.gg/sghjJ7WyWJ"] = "อัปเดต ช่วยเหลือ และพูดคุย\nDiscord: https://discord.gg/sghjJ7WyWJ",
+        ["Close"] = "ปิด", ["Unload the interface? Anything it is running stops."] = "ปิดสคริปต์? ทุกอย่างที่รันอยู่จะหยุด",
+        ["Unload"] = "ปิดสคริปต์", ["Cancel"] = "ยกเลิก", ["Search"] = "ค้นหา",
+        -- Notifications
+        ["Auto Roll enabled."] = "เปิดทอยอัตโนมัติแล้ว", ["Auto Roll disabled."] = "ปิดทอยอัตโนมัติแล้ว",
+        ["Collected money from all slots."] = "เก็บเงินทุกช่องแล้ว",
+        ["Auto Use Items enabled."] = "เปิดใช้ไอเทมอัตโนมัติแล้ว", ["Auto Use Items disabled."] = "ปิดใช้ไอเทมอัตโนมัติแล้ว",
+        ["Item selection cleared."] = "ล้างการเลือกไอเทมแล้ว", ["Auto Tower disabled."] = "ปิดลงหอคอยอัตโนมัติแล้ว",
+        ["Left the tower."] = "ออกจากหอคอยแล้ว", ["Equipped the best units."] = "ใส่ยูนิตดีสุดแล้ว",
+        ["Auto Sell enabled."] = "เปิดขายอัตโนมัติแล้ว", ["Auto Sell disabled."] = "ปิดขายอัตโนมัติแล้ว",
+        ["No eligible units to sell. Units may be protected."] = "ไม่มียูนิตที่ขายได้ อาจถูกกันไว้",
+        ["Unit list refreshed."] = "รีเฟรชรายชื่อยูนิตแล้ว", ["Trait unit list refreshed."] = "รีเฟรชรายชื่อยูนิตแล้ว",
+        ["Quirk unit list refreshed."] = "รีเฟรชรายชื่อยูนิตแล้ว",
+        ["Auto Reroll enabled."] = "เปิดสุ่มอัตโนมัติแล้ว", ["Auto Reroll disabled."] = "ปิดสุ่มอัตโนมัติแล้ว",
+        ["Auto Trait Reroll enabled."] = "เปิดสุ่มเทรตอัตโนมัติแล้ว", ["Auto Trait Reroll disabled."] = "ปิดสุ่มเทรตอัตโนมัติแล้ว",
+        ["Auto Quirk Reroll enabled."] = "เปิดสุ่มเควิร์กอัตโนมัติแล้ว", ["Auto Quirk Reroll disabled."] = "ปิดสุ่มเควิร์กอัตโนมัติแล้ว",
+        ["Auto Reroll Stopped"] = "หยุดสุ่มอัตโนมัติ", ["Auto Trait Reroll Stopped"] = "หยุดสุ่มเทรต",
+        ["Auto Quirk Reroll Stopped"] = "หยุดสุ่มเควิร์ก", ["Trait Reroll"] = "สุ่มเทรต", ["Trait Reroll Stopped"] = "หยุดสุ่มเทรต",
+        ["Quirk Reroll"] = "สุ่มเควิร์ก", ["Quirk Reroll Stopped"] = "หยุดสุ่มเควิร์ก",
+        ["Select a unit to reroll first."] = "เลือกยูนิตก่อน", ["Reroll requested."] = "ส่งคำขอสุ่มแล้ว",
+        ["Could not reroll."] = "สุ่มไม่ได้", ["Purchased available upgrades in selected categories."] = "ซื้ออัปเกรดแล้ว",
+        ["Purchased affordable dice."] = "ซื้อลูกเต๋าแล้ว",
+        ["Enter or paste a webhook URL first."] = "ใส่ลิงก์เว็บฮุกก่อน", ["Webhook URL saved and validated."] = "บันทึกลิงก์แล้ว",
+        ["Saved. The URL does not match the usual Discord webhook format."] = "บันทึกแล้ว แต่ลิงก์ไม่เหมือนเว็บฮุกดิสคอร์ด",
+        ["Webhook URL pasted from the clipboard."] = "วางลิงก์แล้ว",
+        ["Could not read the clipboard. Paste directly into the input."] = "อ่านคลิปบอร์ดไม่ได้ ให้วางในช่องเอง",
+        ["Discord Webhook enabled."] = "เปิดเว็บฮุกแล้ว", ["Discord Webhook disabled."] = "ปิดเว็บฮุกแล้ว",
+        ["Enter a webhook URL before testing."] = "ใส่ลิงก์ก่อนทดสอบ", ["Test message sent to Discord."] = "ส่งข้อความทดสอบแล้ว",
+        ["Could not send the webhook. Check the URL and network."] = "ส่งไม่ได้ ตรวจลิงก์และเน็ต",
+        ["Enter a webhook URL before sending a summary."] = "ใส่ลิงก์ก่อนส่งสรุป",
+        ["Statistics summary sent to Discord."] = "ส่งสรุปแล้ว", ["Could not send. Check the webhook URL."] = "ส่งไม่ได้ ตรวจลิงก์",
+        ["Discord invite copied to the clipboard."] = "คัดลอกลิงก์ดิสคอร์ดแล้ว",
+        ["Auto Save"] = "บันทึกอัตโนมัติ", ["Profile Load Failed"] = "โหลดโปรไฟล์ไม่สำเร็จ",
+        ["Auto Save Unavailable"] = "บันทึกอัตโนมัติใช้ไม่ได้",
+        ["This executor does not provide the required file APIs."] = "ตัวรันนี้ไม่รองรับการบันทึกไฟล์",
+        -- Stop reasons returned by the reroll engines
+        ["Select a unit first."] = "เลือกยูนิตก่อน", ["Target grade reached."] = "ได้เกรดเป้าหมายแล้ว",
+        ["Target trait reached."] = "ได้เทรตเป้าหมายแล้ว", ["Target quirk reached."] = "ได้เควิร์กเป้าหมายแล้ว",
+        ["No Gems remaining."] = "เจมหมด", ["No Trait Reroll items remaining."] = "ไอเทม Trait Reroll หมด",
+        ["Not enough money to roll."] = "เงินไม่พอสุ่ม", ["Selected unit is no longer available."] = "ไม่พบยูนิตที่เลือก",
+        ["Trait reroll requested."] = "ส่งคำขอสุ่มเทรตแล้ว", ["Quirk reroll requested."] = "ส่งคำขอสุ่มเควิร์กแล้ว",
+        ["Waiting for server confirmation."] = "รอเซิร์ฟเวอร์ยืนยัน",
+    }
+    -- Labels built from data keep their variable part.
+    local patterns = {
+        {"^Lock Grade (.+)$", "ล็อกเกรด %1"}, {"^Protect grade (.+) on the server$", "กันเกรด %1 บนเซิร์ฟเวอร์"},
+        {"^Lock Trait (.+)$", "ล็อกเทรต %1"}, {"^Lock Quirk (.+)$", "ล็อกเควิร์ก %1"},
+        {"^Current grade is locked: (.+)$", "เกรดปัจจุบันถูกล็อก: %1"},
+        {"^Current trait is locked: (.+)$", "เทรตปัจจุบันถูกล็อก: %1"},
+        {"^Current quirk is locked: (.+)$", "เควิร์กปัจจุบันถูกล็อก: %1"},
+        {"^Auto Tower enabled: (.+)$", "เปิดลงหอคอยอัตโนมัติ: %1"},
+    }
+    local function translate(label)
+        local text = TH[label.Text]
+        if not text then
+            for _, p in ipairs(patterns) do
+                if label.Text:match(p[1]) then text = label.Text:gsub(p[1], p[2]) break end
+            end
+        end
+        if text and text ~= label.Text then label.Text = text end
+    end
+    local function hook(item)
+        -- TextBox is skipped so typed input is never rewritten.
+        if not (item:IsA("TextLabel") or item:IsA("TextButton")) then return end
+        translate(item)
+        table.insert(_conns, item:GetPropertyChangedSignal("Text"):Connect(function() translate(item) end))
+    end
+    for _, item in ipairs(VaderUI.GUI:GetDescendants()) do hook(item) end
+    table.insert(_conns, VaderUI.GUI.DescendantAdded:Connect(hook))
+end
+
 -- Tabs
 local Tabs = {
     Main     = Window:AddTab({Title = "Main"}),
