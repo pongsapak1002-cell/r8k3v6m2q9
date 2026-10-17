@@ -1818,7 +1818,7 @@ local DamageUpgradeConfig = require(Configs.DamageUpgradeConfig)
 local SpeedUpgradeConfig = require(Configs.SpeedUpgradeConfig)
 local BloodConfig = require(Configs.BloodTransfusionConfig)
 
-local RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical", "Divine", "Secret" }
+local RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical", "Divine", "Secret", "Cosmic" }
 local ZONES = {}
 for _, rarity in ipairs(RARITIES) do
     if AreaConfig[rarity .. "Area"] then table.insert(ZONES, rarity .. "Area") end
