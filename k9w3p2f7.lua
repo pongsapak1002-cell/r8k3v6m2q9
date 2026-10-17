@@ -1761,7 +1761,7 @@ return Library
 
 end
 
-local MAP_NAME = "Mosquito Farm"
+local MAP_NAME = "Feed A Mosquito"
 local Env = (getgenv and getgenv()) or _G
 if Env.VaderMapStarter then pcall(function() Env.VaderMapStarter:Destroy() end) end
 
