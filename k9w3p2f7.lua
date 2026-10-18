@@ -1979,7 +1979,12 @@ local function attack(target, hum, root)
 end
 
 local function pickEgg(eggRoot, prompt, root)
-    root.CFrame = eggRoot.CFrame * CFrame.new(0, 2, 3)
+    -- the prompt sits at the egg's base, far from its centre on big eggs, and the egg body blocks line of sight
+    local anchor = prompt.Parent
+    local spot = anchor and anchor:IsA("Attachment") and anchor.WorldPosition or eggRoot.Position
+    root.CFrame = CFrame.new(spot + Vector3.new(0, 3, 0))
+    prompt.RequiresLineOfSight = false
+    prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 30)
     task.wait(0.25)
     if fireproximityprompt then
         fireproximityprompt(prompt)
