@@ -3616,7 +3616,59 @@ do
 		end
 		return false
 	end
+	-- Set Location (Fishing tab): a spot per world, saved with the facing, used instead of the pier middle
+	local function spotKey()
+		return "Spot_" .. tostring(N.worldKey())
+	end
+	function N.fishSpot()
+		local s = Library.Persist and Library.Persist(spotKey(), {}) or {}
+		if type(s.x) == "number" and type(s.y) == "number" and type(s.z) == "number" then
+			return Vector3.new(s.x, s.y, s.z), tonumber(s.yaw) or 0
+		end
+		return nil
+	end
+	function N.setFishSpot()
+		local root = N.root()
+		if not root then
+			return false, "no character"
+		end
+		local p = root.Position
+		local look = root.CFrame.LookVector
+		Library.Save(spotKey(), { x = p.X, y = p.Y, z = p.Z, yaw = math.atan2(-look.X, -look.Z) })
+		local inside
+		local area = N.throwArea()
+		local ThrowArea = N.sh("Modules.ThrowArea")
+		if area and type(ThrowArea) == "table" and type(ThrowArea.IsInside) == "function" then
+			local ok, yes = pcall(ThrowArea.IsInside, area, p)
+			inside = ok and yes == true
+		end
+		log("SPOT set", tostring(N.worldKey()), string.format("(%.1f, %.1f, %.1f)", p.X, p.Y, p.Z), "inside throw area=" .. tostring(inside))
+		return true, inside
+	end
+	function N.clearFishSpot()
+		Library.Save(spotKey(), {})
+		log("SPOT cleared", tostring(N.worldKey()))
+	end
 	function N.goPier()
+		local spot, yaw = N.fishSpot()
+		if spot then
+			local here = N.myPos()
+			if here and (here - spot).Magnitude <= 4 then
+				return true
+			end
+			setStatus("Going to your fishing spot")
+			local char = N.char()
+			local root = N.root()
+			if char and root then
+				pcall(function()
+					root.AssemblyLinearVelocity = Vector3.zero
+					char:PivotTo(CFrame.new(spot) * CFrame.Angles(0, yaw, 0))
+				end)
+			end
+			task.wait(0.4)
+			here = N.myPos()
+			return here ~= nil and (here - spot).Magnitude <= 6
+		end
 		if N.atPier() then
 			return true
 		end
@@ -6681,6 +6733,26 @@ do
 			Tooltip = "Share of Perfect throws (+33% distance, deeper water, more fish). 60% is what the game's AutoBoost enchant gives",
 		})
 		FishBox:AddToggle("IndexHunt", { Text = "Index Hunt", Default = false, Tooltip = "Counts species missing from your index 50% higher when picking fish (every 10/25/50/75/100 species = +10% on all sales)" })
+		FishBox:AddButton({
+			Text = "Set Location",
+			Func = function()
+				local ok, inside = N.setFishSpot()
+				if not ok then
+					notify("Set Location", "No character yet, try again in a moment", 3)
+				elseif inside == false then
+					notify("Set Location", "Saved for " .. tostring(N.worldKey()) .. ", but it is outside the fishing area: the game may refuse casts there", 5)
+				else
+					notify("Set Location", "Saved: Auto Fish casts from here in " .. tostring(N.worldKey()), 4)
+				end
+			end,
+		})
+		FishBox:AddButton({
+			Text = "Clear Location",
+			Func = function()
+				N.clearFishSpot()
+				notify("Set Location", "Cleared: Auto Fish uses the pier in " .. tostring(N.worldKey()), 4)
+			end,
+		})
 		Labels.Fish = { SetText = function() end }
 		local SellBox = Tabs.Fishing:AddRightGroupbox("Auto Sell", "coins")
 		SellBox:AddToggle("SmartSell", {
