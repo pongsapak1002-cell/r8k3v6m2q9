@@ -1921,6 +1921,9 @@ local function Vader_MakeLibrary()
         AutoMutate = "Mutates your best fish",
         AutoPets = "Hatches eggs at your pond, equips the best pet",
         AutoCargo = "Fills, sends and claims the cargo boat",
+        AutoMaze = "World 2: Sand Key, Plesiosaur, Megalodon, Duneworm Colossus, Duskfang Scorpion, Chrono Rod (2.5T)",
+        AutoCave = "World 3: Frozen Key, Blue Whale, Frost Serpent, Tuskbreaker Narwhal, Glacierback Ankylos, Frostbite Rod (15T)",
+        AutoVolcano = "World 4: Lava Key, 4 levers, Emberback Caldera, Anvilhead Forgeshark, Cindermaw Angler, Anchorbone Reaper, Magma Rod (60T)",
         BaitPick = "Empty = any bait in the budget",
         KeepOnTeleport = "Re-runs the script after a server change",
         WebhookCard = "One message, updated every 2 min",
@@ -2741,6 +2744,9 @@ do
 		HatchEgg = true,
 		EquipPet = true,
 		Cargo = true,
+		Maze = true,
+		Cave = true,
+		Volcano = true,
 	}
 	local Functions = { Sell = true, SellAll = true }
 	-- The fishing loop logs its own CAST/HOOK lines, these stay out of the SEND lines.
@@ -2755,6 +2761,9 @@ do
 		HatchEgg = { Place = true, Hatch = true },
 		EquipPet = { Equip = true },
 		Cargo = { Sync = true, Give = true, Send = true, Claim = true },
+		Maze = { GiveKey = true, PlaceFish = true, ClaimRod = true },
+		Cave = { GiveKey = true, PlaceFish = true, ClaimRod = true },
+		Volcano = { GiveKey = true, PullLever = true, PlaceFish = true, ClaimRod = true },
 	}
 	N.Sent = { count = 0, byName = {}, window = {}, recent = {} }
 	function N.remoteExists(name)
@@ -3142,6 +3151,9 @@ do
 	-- never part of the sellable value the planner counts on (a kept 361K Secret fish once made a "fund" sale come up
 	-- short of the rod price and the buy never followed).
 	function N.keeps(item, def)
+		if N.dungeonNeeds and N.dungeonNeeds(item.Name) then
+			return true
+		end
 		def = def or N.fishDef(item.Name)
 		local rarity = def and def.Rarity or "Common"
 		if selected(Options.KeepRarities, rarity) or selected(Options.KeepFish, tostring(item.Name)) then
@@ -3712,6 +3724,10 @@ do
 			local index = N.tab("Index").Fish
 			if on("IndexHunt") and type(index) == "table" and not index[name] then
 				value = value * 1.5 + 1
+			end
+			-- a fish an open dungeon slot still needs (and the backpack does not hold yet) is hooked before everything else
+			if N.dungeonHunt and N.dungeonHunt(name) then
+				value = math.huge
 			end
 			table.insert(fish, { index = i, name = name, value = value, fight = N.fightRequired(name, boss), boss = boss })
 		end
@@ -5684,10 +5700,11 @@ do
 	end
 	-- Go fishing in the best unlocked world (Auto Worlds / planner).
 	function N.worldStep()
-		if not (on("AutoWorlds") or N.planner()) then
+		local hunt = N.dungeonWorld and N.dungeonWorld()
+		if not (on("AutoWorlds") or N.planner() or hunt) then
 			return false
 		end
-		local best = N.bestFishingWorld()
+		local best = hunt or N.bestFishingWorld()
 		local cur = N.worldKey()
 		if N.World.manual == cur then
 			return false
@@ -6135,6 +6152,225 @@ do
 		end
 		return gave > 0
 	end
+	-- Dungeons (Sun Temple Maze, Frozen Cave, Ember Volcano), the same server steps as the game's prompts: GiveKey at the
+	-- keeper in the parent world (key in the inventory), then in the sub world PlaceFish(slot) holding that slot's fish at
+	-- its Tray, ClaimRod at the RodPedestal once all 4 are in (pays the rod price). The Volcano also needs its 4 levers
+	-- (PullLever, a player attribute, not saved) before every fish or claim. Missing slot fish are kept from Smart Sell.
+	local Dungeons = {
+		{ remote = "Maze", cfg = "MazeConfig", room = "Rotunda", toggle = "AutoMaze" },
+		{ remote = "Cave", cfg = "CaveConfig", room = "FishHall", toggle = "AutoCave" },
+		{ remote = "Volcano", cfg = "VolcanoConfig", toggle = "AutoVolcano" },
+	}
+	local function dungeonOpen(D)
+		local cfg = N.sh("Config." .. D.cfg)
+		local state = N.tab(D.remote)
+		if type(cfg) ~= "table" or state.RodUnlocked or not N.unlocked(cfg.World) then
+			return nil
+		end
+		local sub = N.worldCfg(cfg.SubWorld)
+		if N.level() < (tonumber(sub and sub.RequiredLevel) or 0) then
+			return nil
+		end
+		return cfg, state
+	end
+	function N.dungeonNeeds(name)
+		for _, D in ipairs(Dungeons) do
+			local cfg, state
+			if on(D.toggle) then
+				cfg, state = dungeonOpen(D)
+			end
+			if cfg then
+				for i, want in ipairs(cfg.Slots or {}) do
+					if want == name and not cfg.Filled(state.Slots, i) then
+						return true
+					end
+				end
+			end
+		end
+		return false
+	end
+	-- the slot fish still missing (open slot, not in the backpack), with the world it swims in; cached 5 s because the
+	-- school ranking asks once per fish
+	local huntCache = { at = -1e9 }
+	local function huntList()
+		if os.clock() - huntCache.at < 5 then
+			return huntCache.list
+		end
+		local owned = {}
+		for _, item in pairs(N.inv()) do
+			if type(item) == "table" and item.Type == "Fish" then
+				owned[item.Name] = true
+			end
+		end
+		local list = {}
+		for _, D in ipairs(Dungeons) do
+			local cfg, state
+			if on(D.toggle) then
+				cfg, state = dungeonOpen(D)
+			end
+			if cfg then
+				for i, want in ipairs(cfg.Slots or {}) do
+					if not cfg.Filled(state.Slots, i) and not owned[want] then
+						list[want] = cfg.World
+					end
+				end
+			end
+		end
+		huntCache.at, huntCache.list = os.clock(), list
+		return list
+	end
+	function N.dungeonHunt(name)
+		return huntList()[name] ~= nil
+	end
+	-- the world to fish in while a dungeon fish is missing (the first dungeon in Maze, Cave, Volcano order)
+	function N.dungeonWorld()
+		local list = huntList()
+		for _, D in ipairs(Dungeons) do
+			local cfg = N.sh("Config." .. D.cfg)
+			for _, want in ipairs(type(cfg) == "table" and cfg.Slots or {}) do
+				if list[want] then
+					return list[want]
+				end
+			end
+		end
+		return nil
+	end
+	function N.dungeonStep()
+		if not (on("AutoMaze") or on("AutoCave") or on("AutoVolcano")) or not N.due("dungeons", 60) then
+			return false
+		end
+		for _, D in ipairs(Dungeons) do
+			local cfg, state
+			if on(D.toggle) then
+				cfg, state = dungeonOpen(D)
+			end
+			if cfg then
+				local did = false
+				local back = N.worldKey()
+				local function find(parent, name)
+					local w = workspace:FindFirstChild("World")
+					local folder = w and w:FindFirstChild(parent)
+					return folder and folder:FindFirstChild(name, true)
+				end
+				local function pos(inst)
+					if not inst then
+						return nil
+					end
+					if inst:IsA("Attachment") then
+						return inst.WorldPosition
+					end
+					if inst:IsA("BasePart") then
+						return inst.Position
+					end
+					local ok, cf = pcall(inst.GetPivot, inst)
+					return if ok then cf.Position else nil
+				end
+				-- 1: the key, at the keeper in the parent world
+				if not state.KeyInserted then
+					local hasKey = false
+					for _, entry in ipairs(N.itemsOf("Key")) do
+						if entry.item.Name == cfg.Key then
+							hasKey = true
+						end
+					end
+					if hasKey and N.travel(cfg.World) then
+						local keeper = pos(find(cfg.World, cfg.Keeper))
+						if keeper and N.goTo(keeper, 8) then
+							send(D.remote, "GiveKey")
+							waitFor(function()
+								return N.tab(D.remote).KeyInserted == true
+							end, 4)
+							log("DUNGEON key", D.remote, cfg.Key, "inserted=" .. tostring(N.tab(D.remote).KeyInserted))
+							did = true
+						end
+					end
+					state = N.tab(D.remote)
+				end
+				-- 2: fish for the empty slots, then the rod
+				local todo = {}
+				if state.KeyInserted then
+					for i, want in ipairs(cfg.Slots or {}) do
+						if not cfg.Filled(state.Slots, i) then
+							for guid, item in pairs(N.inv()) do
+								if type(item) == "table" and item.Type == "Fish" and item.Name == want then
+									table.insert(todo, { slot = i, guid = guid, item = item })
+									break
+								end
+							end
+						end
+					end
+				end
+				local rods = N.sh("Content.Item.Rod")
+				local okRod, rodDef = pcall(function()
+					return rods:Get(cfg.Rod, true)
+				end)
+				local price = tonumber(okRod and rodDef and rodDef.Price) or math.huge
+				local function allIn()
+					local s = N.tab(D.remote)
+					for i in ipairs(cfg.Slots or {}) do
+						if not cfg.Filled(s.Slots, i) then
+							return false
+						end
+					end
+					return true
+				end
+				local wantsRod = state.KeyInserted and N.cash() >= price
+				if (#todo > 0 or (wantsRod and allIn())) and N.travel(cfg.SubWorld) then
+					setStatus("Dungeon: " .. tostring(cfg.SubWorld))
+					local roomName = D.room or cfg.Room or "Rotunda"
+					if cfg.Levers then
+						for i = 1, cfg.Levers do
+							local pulled = false
+							pcall(function()
+								pulled = cfg.Pulled(LocalPlayer:GetAttribute(cfg.LeverAttribute), i)
+							end)
+							local lever = not pulled and pos(find(cfg.SubWorld, "Lever" .. i))
+							if lever and N.goTo(lever, 5) then
+								send(D.remote, "PullLever", i)
+								task.wait(0.8)
+							end
+						end
+					end
+					local room = find(cfg.SubWorld, roomName)
+					for _, t in ipairs(todo) do
+						local slot = room and room:FindFirstChild("Slot" .. t.slot)
+						local tray = pos(slot and slot:FindFirstChild("Tray"))
+						if tray and N.inv()[t.guid] then
+							if N.isLocked(t.item) then
+								send("Lock", "Toggle", t.guid)
+								task.wait(0.5)
+							end
+							N.goTo(tray, 5)
+							N.holdItem(t.guid)
+							send(D.remote, "PlaceFish", t.slot)
+							waitFor(function()
+								return cfg.Filled(N.tab(D.remote).Slots, t.slot)
+							end, 4)
+							log("DUNGEON place", D.remote, "slot" .. t.slot, t.item.Name, "ok=" .. tostring(cfg.Filled(N.tab(D.remote).Slots, t.slot)))
+							did = true
+						end
+					end
+					if allIn() and N.cash() >= price then
+						local pedestal = room and room:FindFirstChild("RodPedestal", true)
+						local display = pos(pedestal and pedestal:FindFirstChild("RodDisplay", true))
+						if display and N.goTo(display, 5) then
+							send(D.remote, "ClaimRod")
+							waitFor(function()
+								return N.tab(D.remote).RodUnlocked == true
+							end, 5)
+							log("DUNGEON rod", D.remote, cfg.Rod, "claimed=" .. tostring(N.tab(D.remote).RodUnlocked), "price=" .. formatNumber(price))
+							did = true
+						end
+					end
+				end
+				if did then
+					N.travel(if back ~= cfg.World and back ~= cfg.SubWorld then back else N.bestFishingWorld())
+					return true
+				end
+			end
+		end
+		return false
+	end
 	-- Probes (Fishing > Probes, all OFF, blatant.md NEW 8): one-shot experiments on hidden server handlers. Each runs once
 	-- per PlaceVersion on this account (the result is remembered in Vader/FISH_probes_<UserId>.txt, a game update runs it
 	-- again), logs `PROBE <name> result=...`, then switches its own toggle off. They never feed the planner: a result only
@@ -6328,6 +6564,7 @@ do
 	Tabs.Upgrades = N.addTab("Upgrades", "trending-up", "Upgrades, rods and worlds")
 	Tabs.Rewards = N.addTab("Rewards", "gift", "Daily, playtime, season, achievements, codes and the Big Mouth")
 	Tabs.Items = N.addTab("Items", "backpack", "Chests, potions, relics, enchants and mutations")
+	Tabs.Dungeons = N.addTab("Dungeons", "castle", "Maze, Cave and Volcano")
 	Tabs.Teleport = N.addTab("Teleport", "map", "Islands")
 	Tabs.Stats = N.addTab("Stats", "chart-column", "Session progress and rates")
 	Tabs.Webhook = N.addTab("Webhook", "webhook", "Discord posts")
@@ -6353,6 +6590,9 @@ do
 		{ "AutoMutate", "Mutations" },
 		{ "AutoPets", "Pets" },
 		{ "AutoCargo", "Cargo" },
+		{ "AutoMaze", "Maze" },
+		{ "AutoCave", "Cave" },
+		{ "AutoVolcano", "Volcano" },
 	}
 	function N.resetOptions()
 		local ignore = {}
@@ -6503,6 +6743,11 @@ do
 		local WorldBox = Tabs.Upgrades:AddRightGroupbox("Worlds", "globe")
 		WorldBox:AddToggle("AutoWorlds", { Text = "Auto Worlds", Default = false, Tooltip = "Unlocks the next world once your level and cash allow (World 2: level 15, 30M; World 3: 40, 7.5B; World 4: 65, 400B) and fishes in the best one" })
 		Labels.World = { SetText = function() end }
+	end
+	do
+		Tabs.Dungeons:AddLeftGroupbox("Sun Temple Maze", "castle"):AddToggle("AutoMaze", { Text = "Auto Maze", Default = false })
+		Tabs.Dungeons:AddLeftGroupbox("Frozen Cave", "snowflake"):AddToggle("AutoCave", { Text = "Auto Cave", Default = false })
+		Tabs.Dungeons:AddLeftGroupbox("Ember Volcano", "flame"):AddToggle("AutoVolcano", { Text = "Auto Volcano", Default = false })
 	end
 	do
 		local RewardBox = Tabs.Rewards:AddLeftGroupbox("Rewards", "gift")
@@ -7323,7 +7568,7 @@ do
 		if N.worldStep() then
 			return
 		end
-		if N.pondStep() or N.petStep() then
+		if N.pondStep() or N.petStep() or N.dungeonStep() then
 			return
 		end
 		if N.bigMouthStep() or N.enchantStep() or N.mutationStep() then
