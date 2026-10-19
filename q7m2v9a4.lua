@@ -288,6 +288,16 @@ local State = {
     QuirkRollDelay = 0.35,
     ProtectedQuirks = {},
 
+    -- Halloween event
+    EventPumpkinRoll = false,
+    EventPumpkinMulti = false,
+    EventHouseWing = "Front Yard",
+    EventTrickOrTreat = false,
+    EventQuests = false,
+    EventPass = false,
+    EventShopAuto = false,
+    EventShopItems = {},
+
     -- Discord Webhook
     WebhookURL               = "",
     WebhookEnabled           = false,
@@ -1453,99 +1463,99 @@ if ((getgenv and getgenv()) or _G).TH == true and VaderUI.GUI then
         ["Periodic Summary"] = "สรุปผลตามเวลา", ["Theme Settings"] = "ธีม", ["Anti-AFK"] = "กัน AFK",
         ["Community & Support"] = "ชุมชนและช่วยเหลือ",
         -- Main
-        ["Auto Roll"] = "ทอยอัตโนมัติ", ["Roll continuously at the server rate."] = "ทอยต่อเนื่องเร็วสุดที่เซิร์ฟให้",
-        ["Auto Rebirth"] = "รีเบิร์ธอัตโนมัติ", ["Rebirth as soon as you can afford the next level."] = "รีเบิร์ธทันทีที่เงินพอ",
-        ["Auto Claim"] = "รับรางวัลอัตโนมัติ", ["Claim daily, spin, and offline rewards."] = "รับรางวัลรายวัน วงล้อ และออฟไลน์",
+        ["Auto Roll"] = "ทอยอัตโนมัติ", ["Roll nonstop."] = "ทอยต่อเนื่องเร็วสุดที่เซิร์ฟให้",
+        ["Auto Rebirth"] = "รีเบิร์ธอัตโนมัติ", ["Rebirth when affordable."] = "รีเบิร์ธทันทีที่เงินพอ",
+        ["Auto Claim"] = "รับรางวัลอัตโนมัติ", ["Daily, spin and offline rewards."] = "รับรางวัลรายวัน วงล้อ และออฟไลน์",
         ["Auto Claim Quests"] = "รับรางวัลเควสอัตโนมัติ",
-        ["Claim completed Daily and Weekly quest rewards automatically."] = "รับรางวัลเควสรายวันและรายสัปดาห์ที่ทำเสร็จ",
-        ["Auto Collect"] = "เก็บเงินอัตโนมัติ", ["Collect money from all slots every 0.5 seconds."] = "เก็บเงินทุกช่องทุก 0.5 วินาที",
-        ["Collect Now"] = "เก็บเงินตอนนี้", ["Collect money from all slots now."] = "เก็บเงินทุกช่องทันที",
+        ["Daily and weekly quests."] = "รับรางวัลเควสรายวันและรายสัปดาห์ที่ทำเสร็จ",
+        ["Auto Collect"] = "เก็บเงินอัตโนมัติ", ["Collect from all slots."] = "เก็บเงินทุกช่องทุก 0.5 วินาที",
+        ["Collect Now"] = "เก็บเงินตอนนี้", ["Collect once."] = "เก็บเงินทุกช่องทันที",
         -- Items
-        ["Use selected items and boosts from your inventory."] = "ใช้ไอเทมและบูสต์ที่เลือก",
-        ["Select Items"] = "เลือกไอเทม", ["Select one or more items to use."] = "เลือกไอเทมที่จะใช้",
-        ["Condition"] = "เงื่อนไข", ["Choose when to use items."] = "เลือกว่าจะใช้ตอนไหน",
-        ["Check Interval (seconds)"] = "เช็กทุก (วินาที)", ["Time between item checks."] = "ระยะห่างการเช็กไอเทม",
-        ["Select Owned"] = "เลือกที่มีทั้งหมด", ["Select every item currently in your inventory."] = "เลือกทุกไอเทมในกระเป๋า",
-        ["Clear All"] = "ล้างทั้งหมด", ["Deselect all items."] = "ยกเลิกการเลือกทั้งหมด",
-        ["Use Now"] = "ใช้ตอนนี้", ["Use each selected item once now."] = "ใช้ไอเทมที่เลือกอย่างละครั้ง",
+        ["Use selected boosts."] = "ใช้ไอเทมและบูสต์ที่เลือก",
+        ["Select Items"] = "เลือกไอเทม", ["Items to use."] = "เลือกไอเทมที่จะใช้",
+        ["Condition"] = "เงื่อนไข", ["When to use."] = "เลือกว่าจะใช้ตอนไหน",
+        ["Check Interval (seconds)"] = "เช็กทุก (วินาที)", ["Check delay."] = "ระยะห่างการเช็กไอเทม",
+        ["Select Owned"] = "เลือกที่มีทั้งหมด", ["Pick all owned."] = "เลือกทุกไอเทมในกระเป๋า",
+        ["Clear All"] = "ล้างทั้งหมด", ["Clear selection."] = "ยกเลิกการเลือกทั้งหมด",
+        ["Use Now"] = "ใช้ตอนนี้", ["Use once."] = "ใช้ไอเทมที่เลือกอย่างละครั้ง",
         -- Towers
-        ["Select Tower"] = "เลือกหอคอย", ["Choose a tower to farm."] = "เลือกหอคอยที่จะฟาร์ม",
-        ["Restart the tower after each win or loss."] = "เริ่มใหม่ทุกครั้งที่ชนะหรือแพ้",
-        ["Equip Best Team"] = "ใส่ทีมที่ดีที่สุด", ["Equip your best damage and health units."] = "ใส่ยูนิตดาเมจและเลือดดีสุด",
-        ["Hide Screen"] = "ซ่อนหน้าจอ", ["Hide the tower battle screen."] = "ซ่อนหน้าจอต่อสู้ในหอคอย",
-        ["Play Tower Now"] = "เข้าหอคอยตอนนี้", ["Start one run of the selected tower."] = "เล่นหอคอยที่เลือกหนึ่งรอบ",
-        ["Exit Tower"] = "ออกจากหอคอย", ["Leave the tower now."] = "ออกจากหอคอยทันที",
+        ["Select Tower"] = "เลือกหอคอย", ["Tower to farm."] = "เลือกหอคอยที่จะฟาร์ม",
+        ["Replay after each run."] = "เริ่มใหม่ทุกครั้งที่ชนะหรือแพ้",
+        ["Equip Best Team"] = "ใส่ทีมที่ดีที่สุด", ["Best team first."] = "ใส่ยูนิตดาเมจและเลือดดีสุด",
+        ["Hide Screen"] = "ซ่อนหน้าจอ", ["Hide battle screen."] = "ซ่อนหน้าจอต่อสู้ในหอคอย",
+        ["Play Tower Now"] = "เข้าหอคอยตอนนี้", ["Start one run."] = "เล่นหอคอยที่เลือกหนึ่งรอบ",
+        ["Exit Tower"] = "ออกจากหอคอย", ["Leave now."] = "ออกจากหอคอยทันที",
         -- Plots
-        ["Auto Equip Best"] = "ใส่ยูนิตดีสุดอัตโนมัติ", ["Keep the best units equipped on your slots."] = "ใส่ยูนิตดีสุดในช่องเสมอ",
-        ["Equip Interval (seconds)"] = "เช็กทุก (วินาที)", ["Time between checks to equip the best units."] = "ระยะห่างการเช็กยูนิตดีสุด",
+        ["Auto Equip Best"] = "ใส่ยูนิตดีสุดอัตโนมัติ", ["Keep best units on slots."] = "ใส่ยูนิตดีสุดในช่องเสมอ",
+        ["Equip Interval (seconds)"] = "เช็กทุก (วินาที)", ["Equip delay."] = "ระยะห่างการเช็กยูนิตดีสุด",
         ["Equip Best Now"] = "ใส่ยูนิตดีสุดตอนนี้", ["Auto Level Up"] = "อัปเลเวลอัตโนมัติ",
-        ["Level up slotted units when affordable."] = "อัปเลเวลยูนิตในช่องเมื่อเงินพอ",
-        ["Preset Level"] = "เลเวลสำเร็จรูป", ["Choose the target unit level."] = "เลือกเลเวลเป้าหมาย",
-        ["Level Limit (10 - 150)"] = "เลเวลสูงสุด (10 - 150)", ["Set the maximum unit level."] = "ตั้งเลเวลสูงสุดของยูนิต",
-        ["Level Up Now"] = "อัปเลเวลตอนนี้", ["Upgrade slotted units once now."] = "อัปยูนิตในช่องหนึ่งครั้ง",
+        ["Level slotted units."] = "อัปเลเวลยูนิตในช่องเมื่อเงินพอ",
+        ["Preset Level"] = "เลเวลสำเร็จรูป", ["Target level."] = "เลือกเลเวลเป้าหมาย",
+        ["Level Limit (10 - 150)"] = "เลเวลสูงสุด (10 - 150)", ["Max level."] = "ตั้งเลเวลสูงสุดของยูนิต",
+        ["Level Up Now"] = "อัปเลเวลตอนนี้", ["Level once."] = "อัปยูนิตในช่องหนึ่งครั้ง",
         -- Auto Sell
-        ["Scan and sell units of the selected rarities."] = "ขายยูนิตระดับที่เลือก",
-        ["Sell Interval (seconds)"] = "ขายทุก (วินาที)", ["Time between inventory sales."] = "ระยะห่างการขาย",
-        ["Rarities"] = "ระดับความหายาก", ["Sell only units of the selected rarities."] = "ขายเฉพาะระดับที่เลือก",
-        ["Protect Equipped"] = "กันยูนิตที่ใส่อยู่", ["Keep units equipped on plots or tower teams."] = "ไม่ขายยูนิตบนแปลงหรือทีมหอคอย",
+        ["Sell selected rarities."] = "ขายยูนิตระดับที่เลือก",
+        ["Sell Interval (seconds)"] = "ขายทุก (วินาที)", ["Sell delay."] = "ระยะห่างการขาย",
+        ["Rarities"] = "ระดับความหายาก", ["Rarities to sell."] = "ขายเฉพาะระดับที่เลือก",
+        ["Protect Equipped"] = "กันยูนิตที่ใส่อยู่", ["Skip plot and tower units."] = "ไม่ขายยูนิตบนแปลงหรือทีมหอคอย",
         ["Protect Grade S and Above"] = "กันเกรด S ขึ้นไป",
-        ["Keep units with grades S, S+, Z, Z+, God, or Infinity."] = "ไม่ขายเกรด S, S+, Z, Z+, God, Infinity",
+        ["Skip grade S and up."] = "ไม่ขายเกรด S, S+, Z, Z+, God, Infinity",
         ["Protect Rare Traits"] = "กันเทรตหายาก",
-        ["Keep units with Samurai, Shogun, Monarch, Transcendent, Eternal, Paradox, or a locked trait."] = "ไม่ขายเทรตหายากหรือเทรตที่ล็อกไว้",
-        ["Protect Locked"] = "กันยูนิตที่ล็อก", ["Keep locked inventory units."] = "ไม่ขายยูนิตที่ล็อกไว้",
-        ["Sell Now"] = "ขายตอนนี้", ["Sell matching units now, up to 50 units."] = "ขายยูนิตที่ตรงเงื่อนไข สูงสุด 50 ตัว",
+        ["Skip rare or locked traits."] = "ไม่ขายเทรตหายากหรือเทรตที่ล็อกไว้",
+        ["Protect Locked"] = "กันยูนิตที่ล็อก", ["Skip locked units."] = "ไม่ขายยูนิตที่ล็อกไว้",
+        ["Sell Now"] = "ขายตอนนี้", ["Sell up to 50 now."] = "ขายยูนิตที่ตรงเงื่อนไข สูงสุด 50 ตัว",
         -- Grades / Traits / Quirks
         ["Grade Guide"] = "วิธีใช้เกรด",
-        ["Each reroll costs 1 Gem. Stop at the target grade or when Gems run out."] = "สุ่มครั้งละ 1 เจม หยุดเมื่อถึงเป้าหรือเจมหมด",
-        ["Select Unit"] = "เลือกยูนิต", ["Choose an inventory unit to reroll."] = "เลือกยูนิตที่จะสุ่ม",
-        ["Refresh Units"] = "รีเฟรชยูนิต", ["Refresh inventory units and their grades."] = "อัปเดตรายชื่อยูนิต",
-        ["Refresh inventory units and their traits."] = "อัปเดตรายชื่อยูนิต",
-        ["Refresh inventory units and their quirks."] = "อัปเดตรายชื่อยูนิต",
-        ["Target Grade"] = "เกรดเป้าหมาย", ["Roll until this grade or higher."] = "สุ่มจนได้เกรดนี้หรือสูงกว่า",
+        ["1 Gem per roll."] = "สุ่มครั้งละ 1 เจม หยุดเมื่อถึงเป้าหรือเจมหมด",
+        ["Select Unit"] = "เลือกยูนิต", ["Unit to reroll."] = "เลือกยูนิตที่จะสุ่ม",
+        ["Refresh Units"] = "รีเฟรชยูนิต", ["Reload units."] = "อัปเดตรายชื่อยูนิต",
+        ["Reload trait units."] = "อัปเดตรายชื่อยูนิต",
+        ["Reload quirk units."] = "อัปเดตรายชื่อยูนิต",
+        ["Target Grade"] = "เกรดเป้าหมาย", ["This grade or higher."] = "สุ่มจนได้เกรดนี้หรือสูงกว่า",
         ["Reroll Interval (seconds)"] = "สุ่มทุก (วินาที)",
-        ["Recommended: 0.25-0.40 seconds between rolls."] = "แนะนำ 0.25-0.40 วินาที",
-        ["Reroll until the unit reaches the target grade."] = "สุ่มจนถึงเกรดเป้าหมาย",
-        ["Reroll 1x"] = "สุ่ม 1 ครั้ง", ["Reroll the selected unit once for 1 Gem."] = "สุ่มหนึ่งครั้ง ใช้ 1 เจม",
+        ["0.25-0.40 recommended."] = "แนะนำ 0.25-0.40 วินาที",
+        ["Roll to target grade."] = "สุ่มจนถึงเกรดเป้าหมาย",
+        ["Reroll 1x"] = "สุ่ม 1 ครั้ง", ["Roll once for 1 Gem."] = "สุ่มหนึ่งครั้ง ใช้ 1 เจม",
         ["Trait Guide"] = "วิธีใช้เทรต",
-        ["Each roll costs 1 Trait Reroll item. Stop at the target or stronger bonuses of the same type. Locked traits are kept."] = "สุ่มครั้งละ 1 ไอเทม Trait Reroll หยุดเมื่อได้เป้าหรือดีกว่า",
-        ["Target Trait"] = "เทรตเป้าหมาย", ["Stop at this trait or stronger bonuses of the same type."] = "หยุดเมื่อได้เทรตนี้หรือดีกว่า",
-        ["Time between trait reroll checks."] = "ระยะห่างการสุ่ม",
-        ["Reroll until the target is reached, a locked trait is found, or items run out."] = "สุ่มจนได้เป้า เจอเทรตที่ล็อก หรือไอเทมหมด",
-        ["Reroll the selected unit once for 1 Trait Reroll item."] = "สุ่มหนึ่งครั้ง ใช้ 1 ไอเทม",
-        ["Stop rerolling when this trait is found."] = "หยุดสุ่มเมื่อเจอเทรตนี้",
+        ["1 Trait Reroll per roll."] = "สุ่มครั้งละ 1 ไอเทม Trait Reroll หยุดเมื่อได้เป้าหรือดีกว่า",
+        ["Target Trait"] = "เทรตเป้าหมาย", ["This trait or stronger."] = "หยุดเมื่อได้เทรตนี้หรือดีกว่า",
+        ["Trait roll delay."] = "ระยะห่างการสุ่ม",
+        ["Roll to target trait."] = "สุ่มจนได้เป้า เจอเทรตที่ล็อก หรือไอเทมหมด",
+        ["Roll once for 1 item."] = "สุ่มหนึ่งครั้ง ใช้ 1 ไอเทม",
+        ["Stop on this trait."] = "หยุดสุ่มเมื่อเจอเทรตนี้",
         ["Quirk Guide"] = "วิธีใช้เควิร์ก",
-        ["Each roll costs money. Stop at the target or stronger buffs of the same type. Locked quirks are kept. Quirks only apply while the unit is on a podium."] = "สุ่มใช้เงิน หยุดเมื่อได้เป้าหรือดีกว่า มีผลเฉพาะยูนิตที่อยู่บนแท่น",
-        ["Target Quirk"] = "เควิร์กเป้าหมาย", ["Stop at this quirk or stronger buffs of the same type."] = "หยุดเมื่อได้เควิร์กนี้หรือดีกว่า",
-        ["Time between quirk reroll checks."] = "ระยะห่างการสุ่ม",
-        ["Reroll until the target is reached, a locked quirk is found, or money runs out."] = "สุ่มจนได้เป้า เจอเควิร์กที่ล็อก หรือเงินหมด",
-        ["Reroll the selected unit once."] = "สุ่มหนึ่งครั้ง", ["Stop rerolling when this quirk is found."] = "หยุดสุ่มเมื่อเจอเควิร์กนี้",
+        ["Costs money. Podium units only."] = "สุ่มใช้เงิน หยุดเมื่อได้เป้าหรือดีกว่า มีผลเฉพาะยูนิตที่อยู่บนแท่น",
+        ["Target Quirk"] = "เควิร์กเป้าหมาย", ["This quirk or stronger."] = "หยุดเมื่อได้เควิร์กนี้หรือดีกว่า",
+        ["Quirk roll delay."] = "ระยะห่างการสุ่ม",
+        ["Roll to target quirk."] = "สุ่มจนได้เป้า เจอเควิร์กที่ล็อก หรือเงินหมด",
+        ["Roll once."] = "สุ่มหนึ่งครั้ง", ["Stop on this quirk."] = "หยุดสุ่มเมื่อเจอเควิร์กนี้",
         -- Upgrades & Dice
-        ["Auto Upgrades"] = "อัปเกรดอัตโนมัติ", ["Buy upgrades in selected categories when affordable."] = "ซื้ออัปเกรดหมวดที่เลือกเมื่อเงินพอ",
-        ["Focus Categories"] = "หมวดที่เน้น", ["Choose categories to purchase first."] = "เลือกหมวดที่จะซื้อก่อน",
-        ["Only Selected"] = "เฉพาะที่เลือก", ["Buy only upgrades in the selected categories."] = "ซื้อเฉพาะหมวดที่เลือก",
+        ["Auto Upgrades"] = "อัปเกรดอัตโนมัติ", ["Buy when affordable."] = "ซื้ออัปเกรดหมวดที่เลือกเมื่อเงินพอ",
+        ["Focus Categories"] = "หมวดที่เน้น", ["Buy these first."] = "เลือกหมวดที่จะซื้อก่อน",
+        ["Only Selected"] = "เฉพาะที่เลือก", ["Skip other categories."] = "ซื้อเฉพาะหมวดที่เลือก",
         ["Buy Upgrades Now"] = "ซื้ออัปเกรดตอนนี้", ["Auto Buy Dice"] = "ซื้อลูกเต๋าอัตโนมัติ",
-        ["Buy unowned dice when affordable."] = "ซื้อลูกเต๋าที่ยังไม่มีเมื่อเงินพอ", ["Buy Available Dice"] = "ซื้อลูกเต๋าที่ซื้อได้",
+        ["Buy new dice."] = "ซื้อลูกเต๋าที่ยังไม่มีเมื่อเงินพอ", ["Buy Available Dice"] = "ซื้อลูกเต๋าที่ซื้อได้",
         -- Webhook
         ["Discord Notifications"] = "แจ้งเตือนดิสคอร์ด",
-        ["Enter a Discord webhook URL for live roll alerts and statistics summaries."] = "ใส่ลิงก์เว็บฮุกเพื่อรับแจ้งเตือนและสรุปผล",
-        ["Discord Webhook URL"] = "ลิงก์เว็บฮุก", ["Paste your Discord webhook URL here."] = "วางลิงก์เว็บฮุกที่นี่",
-        ["Confirm URL"] = "ยืนยันลิงก์", ["Save and validate the URL; useful on mobile."] = "บันทึกและตรวจลิงก์ (สะดวกบนมือถือ)",
-        ["Paste Clipboard"] = "วางจากคลิปบอร์ด", ["Paste the URL from your clipboard."] = "วางลิงก์จากคลิปบอร์ด",
-        ["Enable"] = "เปิดใช้", ["Send notifications to Discord."] = "ส่งแจ้งเตือนไปดิสคอร์ด",
-        ["Test Webhook"] = "ทดสอบเว็บฮุก", ["Send a test message to Discord."] = "ส่งข้อความทดสอบ",
-        ["High Rolls"] = "ทอยได้ของดี", ["Report unit, grade, and trait details to Discord."] = "แจ้งยูนิต เกรด และเทรต",
-        ["Min Rarity"] = "ระดับขั้นต่ำ", ["Set the minimum rarity for notifications."] = "ระดับต่ำสุดที่จะแจ้ง",
-        ["Rebirth Alert"] = "แจ้งรีเบิร์ธ", ["Report new rebirth levels and bonuses."] = "แจ้งเลเวลรีเบิร์ธและโบนัส",
-        ["High Grade"] = "เกรดสูง", ["Report grades S, S+, Z, Z+, God, and Infinity."] = "แจ้งเกรด S ขึ้นไป",
-        ["Rare Trait"] = "เทรตหายาก", ["Report rare trait rerolls to Discord."] = "แจ้งเมื่อสุ่มได้เทรตหายาก",
-        ["Auto Summary"] = "สรุปผลอัตโนมัติ", ["Send scheduled cash, rebirth, and unit summaries."] = "ส่งสรุปเงิน รีเบิร์ธ และยูนิตตามเวลา",
-        ["Summary Interval (minutes)"] = "สรุปทุก (นาที)", ["Time between summaries: 5-60 minutes."] = "ระยะห่าง 5-60 นาที",
-        ["Send Summary Now"] = "ส่งสรุปตอนนี้", ["Send your current statistics to Discord now."] = "ส่งสถิติตอนนี้ไปดิสคอร์ด",
+        ["Roll alerts and summaries."] = "ใส่ลิงก์เว็บฮุกเพื่อรับแจ้งเตือนและสรุปผล",
+        ["Discord Webhook URL"] = "ลิงก์เว็บฮุก", ["Webhook link."] = "วางลิงก์เว็บฮุกที่นี่",
+        ["Confirm URL"] = "ยืนยันลิงก์", ["Save the link."] = "บันทึกและตรวจลิงก์ (สะดวกบนมือถือ)",
+        ["Paste Clipboard"] = "วางจากคลิปบอร์ด", ["Paste link."] = "วางลิงก์จากคลิปบอร์ด",
+        ["Enable"] = "เปิดใช้", ["Send alerts."] = "ส่งแจ้งเตือนไปดิสคอร์ด",
+        ["Test Webhook"] = "ทดสอบเว็บฮุก", ["Send a test."] = "ส่งข้อความทดสอบ",
+        ["High Rolls"] = "ทอยได้ของดี", ["Alert on rare units."] = "แจ้งยูนิต เกรด และเทรต",
+        ["Min Rarity"] = "ระดับขั้นต่ำ", ["Lowest rarity to alert."] = "ระดับต่ำสุดที่จะแจ้ง",
+        ["Rebirth Alert"] = "แจ้งรีเบิร์ธ", ["Alert on rebirth."] = "แจ้งเลเวลรีเบิร์ธและโบนัส",
+        ["High Grade"] = "เกรดสูง", ["Alert on grade S and up."] = "แจ้งเกรด S ขึ้นไป",
+        ["Rare Trait"] = "เทรตหายาก", ["Alert on rare traits."] = "แจ้งเมื่อสุ่มได้เทรตหายาก",
+        ["Auto Summary"] = "สรุปผลอัตโนมัติ", ["Timed stats."] = "ส่งสรุปเงิน รีเบิร์ธ และยูนิตตามเวลา",
+        ["Summary Interval (minutes)"] = "สรุปทุก (นาที)", ["5-60 minutes."] = "ระยะห่าง 5-60 นาที",
+        ["Send Summary Now"] = "ส่งสรุปตอนนี้", ["Send stats now."] = "ส่งสถิติตอนนี้ไปดิสคอร์ด",
         -- Settings
         ["Theme"] = "ธีม", ["Show / Hide Key"] = "ปุ่มเปิด/ปิด UI", ["Unload UI"] = "ปิดสคริปต์",
-        ["Save your profile, stop automation, and close the UI."] = "บันทึก หยุดทุกอย่าง แล้วปิด UI",
-        ["Prevent idle disconnections."] = "กันโดนเตะเพราะยืนนิ่ง", ["Copy Discord Invite"] = "คัดลอกลิงก์ดิสคอร์ด",
-        ["Copy the Discord invite to your clipboard."] = "คัดลอกลิงก์เชิญดิสคอร์ด",
+        ["Save and close."] = "บันทึก หยุดทุกอย่าง แล้วปิด UI",
+        ["Stay connected."] = "กันโดนเตะเพราะยืนนิ่ง", ["Copy Discord Invite"] = "คัดลอกลิงก์ดิสคอร์ด",
+        ["Copy invite."] = "คัดลอกลิงก์เชิญดิสคอร์ด",
         ["Vader updates, support and community.\nDiscord: https://discord.gg/sghjJ7WyWJ"] = "อัปเดต ช่วยเหลือ และพูดคุย\nDiscord: https://discord.gg/sghjJ7WyWJ",
         ["Close"] = "ปิด", ["Unload the interface? Anything it is running stops."] = "ปิดสคริปต์? ทุกอย่างที่รันอยู่จะหยุด",
         ["Unload"] = "ปิดสคริปต์", ["Cancel"] = "ยกเลิก", ["Search"] = "ค้นหา",
@@ -1588,10 +1598,27 @@ if ((getgenv and getgenv()) or _G).TH == true and VaderUI.GUI then
         ["Not enough money to roll."] = "เงินไม่พอสุ่ม", ["Selected unit is no longer available."] = "ไม่พบยูนิตที่เลือก",
         ["Trait reroll requested."] = "ส่งคำขอสุ่มเทรตแล้ว", ["Quirk reroll requested."] = "ส่งคำขอสุ่มเควิร์กแล้ว",
         ["Waiting for server confirmation."] = "รอเซิร์ฟเวอร์ยืนยัน",
+        ["Lock on server."] = "ล็อกบนเซิร์ฟเวอร์",
+        -- Event
+        ["Event"] = "อีเวนต์", ["No Event"] = "ไม่มีอีเวนต์", ["No event is running."] = "ตอนนี้ไม่มีอีเวนต์",
+        ["Pumpkin Dice"] = "ลูกเต๋าฟักทอง", ["Auto Pumpkin Dice"] = "ทอยลูกเต๋าฟักทองอัตโนมัติ",
+        ["Several dice per roll."] = "ทอยหลายลูกต่อครั้ง",
+        ["Game sells these on roll."] = "เกมขายตัวที่เลือกทันทีที่ทอยได้",
+        ["Pumpkin Dice Stopped"] = "หยุดทอยลูกเต๋าฟักทอง",
+        ["Haunted House"] = "บ้านผีสิง", ["Wing"] = "โซน", ["Wing to farm."] = "โซนที่จะฟาร์ม",
+        ["Auto Haunted House"] = "ฟาร์มบ้านผีสิงอัตโนมัติ", ["Farms Pumpkins and Candy."] = "ฟาร์มฟักทองและขนม",
+        ["Trick or Treat"] = "ทริกออร์ทรีต", ["Auto Trick or Treat"] = "เคาะประตูอัตโนมัติ",
+        ["Visits doors for Candy."] = "เดินเคาะประตูเก็บขนม", ["Go to Island"] = "ไปเกาะอีเวนต์",
+        ["Event island."] = "วาร์ปไปเกาะ", ["Back to Hub"] = "กลับจุดเกิด", ["Main area."] = "วาร์ปกลับ",
+        ["Rewards"] = "รางวัล", ["Auto Event Quests"] = "รับเควสอีเวนต์อัตโนมัติ", ["Hourly and daily."] = "รายชั่วโมงและรายวัน",
+        ["Auto Pumpkin Pass"] = "รับ Pumpkin Pass อัตโนมัติ", ["Claims unlocked tiers."] = "รับขั้นที่ปลดล็อกแล้ว",
+        ["Candy Shop"] = "ร้านขนม", ["Items to buy."] = "ของที่จะซื้อ", ["Auto Buy"] = "ซื้ออัตโนมัติ",
+        ["Spends Candy on selected items."] = "ใช้ขนมซื้อของที่เลือก",
     }
     -- Labels built from data keep their variable part.
     local patterns = {
-        {"^Lock Grade (.+)$", "ล็อกเกรด %1"}, {"^Protect grade (.+) on the server$", "กันเกรด %1 บนเซิร์ฟเวอร์"},
+        {"^Lock Grade (.+)$", "ล็อกเกรด %1"},
+        {"^(%d+) Pumpkins per roll%.$", "ใช้ %1 ฟักทองต่อครั้ง"}, {"^Roll (%d+)x$", "ทอย %1 ลูก"},
         {"^Lock Trait (.+)$", "ล็อกเทรต %1"}, {"^Lock Quirk (.+)$", "ล็อกเควิร์ก %1"},
         {"^Current grade is locked: (.+)$", "เกรดปัจจุบันถูกล็อก: %1"},
         {"^Current trait is locked: (.+)$", "เทรตปัจจุบันถูกล็อก: %1"},
@@ -1627,6 +1654,7 @@ local Tabs = {
     Grades   = Window:AddTab({Title = "Grades"}),
     Traits   = Window:AddTab({Title = "Traits"}),
     Quirks   = Window:AddTab({Title = "Quirks"}),
+    Event    = Window:AddTab({Title = "Event"}),
     Upgrades = Window:AddTab({Title = "Upgrades & Dice"}),
     Webhook  = Window:AddTab({Title = "Webhook"}),
     Settings = Window:AddTab({Title = "Settings"}),
@@ -1636,7 +1664,7 @@ local secRoll = Tabs.Main:AddSection("Rolling")
 
 secRoll:AddToggle("TogAutoRoll", {
     Title       = "Auto Roll",
-    Description = "Roll continuously at the server rate.",
+    Description = "Roll nonstop.",
     Default     = false,
     Callback    = function(v)
         State.AutoRoll = v
@@ -1648,7 +1676,7 @@ local secProg = Tabs.Main:AddSection("Rebirth & Claims")
 
 secProg:AddToggle("TogAutoRebirth", {
     Title       = "Auto Rebirth",
-    Description = "Rebirth as soon as you can afford the next level.",
+    Description = "Rebirth when affordable.",
     Default     = false,
     Callback    = function(v)
         State.AutoRebirth = v
@@ -1658,7 +1686,7 @@ secProg:AddToggle("TogAutoRebirth", {
 
 secProg:AddToggle("TogAutoClaim", {
     Title       = "Auto Claim",
-    Description = "Claim daily, spin, and offline rewards.",
+    Description = "Daily, spin and offline rewards.",
     Default     = false,
     Callback    = function(v) State.AutoClaim = v end
 })
@@ -1666,7 +1694,7 @@ secProg:AddToggle("TogAutoClaim", {
 local secQuests = Tabs.Main:AddSection("Quests")
 secQuests:AddToggle("TogAutoClaimQuests", {
     Title = "Auto Claim Quests",
-    Description = "Claim completed Daily and Weekly quest rewards automatically.",
+    Description = "Daily and weekly quests.",
     Default = false,
     Callback = function(value)
         State.AutoClaimQuests = value
@@ -1678,14 +1706,14 @@ local secCollect = Tabs.Main:AddSection("Collect Balance")
 
 secCollect:AddToggle("TogAutoCollect", {
     Title       = "Auto Collect",
-    Description = "Collect money from all slots every 0.5 seconds.",
+    Description = "Collect from all slots.",
     Default     = false,
     Callback    = function(v) State.AutoCollect = v end
 })
 
 secCollect:AddButton({
     Title       = "Collect Now",
-    Description = "Collect money from all slots now.",
+    Description = "Collect once.",
     Callback    = function()
         collectAllSlots()
         VaderUI:Notify({Title = "Vader Script", Content = "Collected money from all slots.", Duration = 2})
@@ -1697,7 +1725,7 @@ local secItems = Tabs.Items:AddSection("Auto Use Items")
 
 secItems:AddToggle("TogAutoUseItems", {
     Title       = "Auto Use Items",
-    Description = "Use selected items and boosts from your inventory.",
+    Description = "Use selected boosts.",
     Default     = false,
     Callback    = function(v)
         State.AutoUseItems = v
@@ -1714,7 +1742,7 @@ local allBoostOptions = getAllBoostNames()
 
 dropSelectedItemsRef = secItems:AddDropdown("DropSelectedItems", {
     Title       = "Select Items",
-    Description = "Select one or more items to use.",
+    Description = "Items to use.",
     Values      = allBoostOptions,
     Multi       = true,
     Default     = {},
@@ -1739,7 +1767,7 @@ local itemConditions = {
 
 secItems:AddDropdown("DropItemCondition", {
     Title       = "Condition",
-    Description = "Choose when to use items.",
+    Description = "When to use.",
     Values      = itemConditions,
     Default     = State.ItemUseCondition or "When Expired",
     Callback    = function(v)
@@ -1749,7 +1777,7 @@ secItems:AddDropdown("DropItemCondition", {
 
 secItems:AddSlider("SlideItemInterval", {
     Title       = "Check Interval (seconds)",
-    Description = "Time between item checks.",
+    Description = "Check delay.",
     Min         = 1,
     Max         = 10,
     Default     = State.ItemUseInterval or 2.0,
@@ -1763,7 +1791,7 @@ local secItemQuick = Tabs.Items:AddSection("Quick Actions")
 
 secItemQuick:AddButton({
     Title       = "Select Owned",
-    Description = "Select every item currently in your inventory.",
+    Description = "Pick all owned.",
     Callback    = function()
         local owned = {}
         pcall(function()
@@ -1798,7 +1826,7 @@ secItemQuick:AddButton({
 
 secItemQuick:AddButton({
     Title       = "Clear All",
-    Description = "Deselect all items.",
+    Description = "Clear selection.",
     Callback    = function()
         table.clear(State.SelectedItems)
         if dropSelectedItemsRef and dropSelectedItemsRef.SetValue then
@@ -1814,7 +1842,7 @@ secItemQuick:AddButton({
 
 secItemQuick:AddButton({
     Title       = "Use Now",
-    Description = "Use each selected item once now.",
+    Description = "Use once.",
     Callback    = function()
         local count = useSelectedItemsNow()
         VaderUI:Notify({
@@ -1829,7 +1857,7 @@ local secTower = Tabs.Tower:AddSection("Auto Tower")
 
 secTower:AddDropdown("DropSelectTower", {
     Title       = "Select Tower",
-    Description = "Choose a tower to farm.",
+    Description = "Tower to farm.",
     Values      = TowerDisplayOptions,
     Default     = 1,
     Callback    = function(v)
@@ -1839,7 +1867,7 @@ secTower:AddDropdown("DropSelectTower", {
 
 secTower:AddToggle("TogAutoTower", {
     Title       = "Auto Tower",
-    Description = "Restart the tower after each win or loss.",
+    Description = "Replay after each run.",
     Default     = false,
     Callback    = function(v)
         State.AutoTower = v
@@ -1853,7 +1881,7 @@ secTower:AddToggle("TogAutoTower", {
 
 secTower:AddToggle("TogAutoEquipTowerTeam", {
     Title       = "Equip Best Team",
-    Description = "Equip your best damage and health units.",
+    Description = "Best team first.",
     Default     = true,
     Callback    = function(v)
         State.AutoEquipBestTowerTeam = v
@@ -1862,7 +1890,7 @@ secTower:AddToggle("TogAutoEquipTowerTeam", {
 
 secTower:AddToggle("TogHideTowerScreen", {
     Title       = "Hide Screen",
-    Description = "Hide the tower battle screen.",
+    Description = "Hide battle screen.",
     Default     = true,
     Callback    = function(v)
         State.HideTowerScreen = v
@@ -1873,7 +1901,7 @@ local secTowerActions = Tabs.Tower:AddSection("Manual Controls")
 
 secTowerActions:AddButton({
     Title       = "Play Tower Now",
-    Description = "Start one run of the selected tower.",
+    Description = "Start one run.",
     Callback    = function()
         pcall(function()
             if State.AutoEquipBestTowerTeam and EquipBestTowerTeamRE then
@@ -1893,7 +1921,7 @@ secTowerActions:AddButton({
 
 secTowerActions:AddButton({
     Title       = "Exit Tower",
-    Description = "Leave the tower now.",
+    Description = "Leave now.",
     Callback    = function()
         pcall(function()
             if CancelTowerRF then
@@ -1908,14 +1936,14 @@ local secUnits = Tabs.Plot:AddSection("Anime Units")
 
 secUnits:AddToggle("TogAutoEquip", {
     Title       = "Auto Equip Best",
-    Description = "Keep the best units equipped on your slots.",
+    Description = "Keep best units on slots.",
     Default     = false,
     Callback    = function(v) State.AutoEquipBest = v end
 })
 
 secUnits:AddSlider("SlideEquipInterval", {
     Title    = "Equip Interval (seconds)",
-    Description = "Time between checks to equip the best units.",
+    Description = "Equip delay.",
     Min      = 1,
     Max      = 30,
     Default  = State.EquipInterval,
@@ -1937,7 +1965,7 @@ local secSlots = Tabs.Plot:AddSection("Level Up Units")
 
 secSlots:AddToggle("TogAutoLevelSlots", {
     Title       = "Auto Level Up",
-    Description = "Level up slotted units when affordable.",
+    Description = "Level slotted units.",
     Default     = false,
     Callback    = function(v) State.AutoLevelSlots = v end
 })
@@ -1959,7 +1987,7 @@ local slideLevelRef = nil
 
 local dropTargetLvl = secSlots:AddDropdown("DropTargetLevel", {
     Title       = "Preset Level",
-    Description = "Choose the target unit level.",
+    Description = "Target level.",
     Values      = levelPresetOptions,
     Default     = "Level 30",
     Callback    = function(val)
@@ -1979,7 +2007,7 @@ local dropTargetLvl = secSlots:AddDropdown("DropTargetLevel", {
 
 slideLevelRef = secSlots:AddSlider("SlideTargetUnitLevel", {
     Title       = "Level Limit (10 - 150)",
-    Description = "Set the maximum unit level.",
+    Description = "Max level.",
     Min         = 10,
     Max         = 150,
     Default     = 30,
@@ -1991,7 +2019,7 @@ slideLevelRef = secSlots:AddSlider("SlideTargetUnitLevel", {
 
 secSlots:AddButton({
     Title       = "Level Up Now",
-    Description = "Upgrade slotted units once now.",
+    Description = "Level once.",
     Callback    = function()
         levelUpAllSlots()
         VaderUI:Notify({
@@ -2006,7 +2034,7 @@ local secSell = Tabs.AutoSell:AddSection("Inventory Sell")
 
 secSell:AddToggle("TogAutoSellUnits", {
     Title       = "Auto Sell",
-    Description = "Scan and sell units of the selected rarities.",
+    Description = "Sell selected rarities.",
     Default     = false,
     Callback    = function(v)
         State.AutoSellUnits = v
@@ -2020,7 +2048,7 @@ secSell:AddToggle("TogAutoSellUnits", {
 
 secSell:AddSlider("SlideSellInterval", {
     Title       = "Sell Interval (seconds)",
-    Description = "Time between inventory sales.",
+    Description = "Sell delay.",
     Min         = 1,
     Max         = 30,
     Default     = State.SellInterval,
@@ -2054,7 +2082,7 @@ local defaultSellRarities = {
 
 secSell:AddDropdown("DropSellRarities", {
     Title       = "Rarities",
-    Description = "Sell only units of the selected rarities.",
+    Description = "Rarities to sell.",
     Values      = sellRarityOptions,
     Multi       = true,
     Default     = defaultSellRarities,
@@ -2076,25 +2104,25 @@ local secSellSafety = Tabs.AutoSell:AddSection("Safety Lock")
 
 secSellSafety:AddToggle("TogProtectPlot", {
     Title       = "Protect Equipped",
-    Description = "Keep units equipped on plots or tower teams.",
+    Description = "Skip plot and tower units.",
     Default     = true,
     Callback    = function(v) State.ProtectPlottedUnits = v end
 })
 
 secSellSafety:AddToggle("TogProtectGradeS", {
     Title       = "Protect Grade S and Above",
-    Description = "Keep units with grades S, S+, Z, Z+, God, or Infinity.",
+    Description = "Skip grade S and up.",
     Default     = true,
     Callback    = function(v) State.ProtectGradeSPlus = v end
 })
 
 secSellSafety:AddToggle("TogProtectTraits",{Title="Protect Rare Traits",
-    Description="Keep units with Samurai, Shogun, Monarch, Transcendent, Eternal, Paradox, or a locked trait.",
+    Description="Skip rare or locked traits.",
     Default=true,Callback=function(value) State.ProtectRareTraits=value end})
 
 secSellSafety:AddToggle("TogProtectLocked", {
     Title       = "Protect Locked",
-    Description = "Keep locked inventory units.",
+    Description = "Skip locked units.",
     Default     = true,
     Callback    = function(v) State.ProtectLockedUnits = v end
 })
@@ -2103,7 +2131,7 @@ local secSellManual = Tabs.AutoSell:AddSection("Manual Actions")
 
 secSellManual:AddButton({
     Title       = "Sell Now",
-    Description = "Sell matching units now, up to 50 units.",
+    Description = "Sell up to 50 now.",
     Callback    = function()
         local count, earned = sellSelectedUnits()
         if count > 0 then
@@ -2158,14 +2186,14 @@ local secGrade = Tabs.Grades:AddSection("Auto Reroll")
 
 secGrade:AddParagraph({
     Title   = "Grade Guide",
-    Content = "Each reroll costs 1 Gem. Stop at the target grade or when Gems run out."
+    Content = "1 Gem per roll."
 })
 
 local dropSelectUnitRef = nil
 
 dropSelectUnitRef = secGrade:AddDropdown("DropGradeUnit", {
     Title       = "Select Unit",
-    Description = "Choose an inventory unit to reroll.",
+    Description = "Unit to reroll.",
     Values      = unitLabels,
     Default     = unitLabels[1] or "",
     Callback    = function(val)
@@ -2178,7 +2206,7 @@ dropSelectUnitRef = secGrade:AddDropdown("DropGradeUnit", {
 
 secGrade:AddButton({
     Title       = "Refresh Units",
-    Description = "Refresh inventory units and their grades.",
+    Description = "Reload units.",
     Callback    = function()
         local newOpts, newMap = getInventoryUnitOptions()
         unitLabels = newOpts
@@ -2213,7 +2241,7 @@ local gradeTargetOptions = {
 
 secGrade:AddDropdown("DropTargetGrade", {
     Title       = "Target Grade",
-    Description = "Roll until this grade or higher.",
+    Description = "This grade or higher.",
     Values      = gradeTargetOptions,
     Default     = "S",
     Callback    = function(v)
@@ -2224,7 +2252,7 @@ secGrade:AddDropdown("DropTargetGrade", {
 
 secGrade:AddSlider("SlideGradeDelay", {
     Title       = "Reroll Interval (seconds)",
-    Description = "Recommended: 0.25-0.40 seconds between rolls.",
+    Description = "0.25-0.40 recommended.",
     Min         = 0.15,
     Max         = 1.0,
     Default     = State.GradeRollDelay,
@@ -2236,7 +2264,7 @@ secGrade:AddSlider("SlideGradeDelay", {
 
 secGrade:AddToggle("TogAutoRerollGrade", {
     Title       = "Auto Reroll",
-    Description = "Reroll until the unit reaches the target grade.",
+    Description = "Roll to target grade.",
     Default     = false,
     Callback    = function(v)
         State.AutoRerollGrade = v
@@ -2252,7 +2280,7 @@ local secGradeManual = Tabs.Grades:AddSection("Manual Reroll")
 
 secGradeManual:AddButton({
     Title       = "Reroll 1x",
-    Description = "Reroll the selected unit once for 1 Gem.",
+    Description = "Roll once for 1 Gem.",
     Callback    = function()
         if not State.TargetGradeUnitKey or State.TargetGradeUnitKey == "" then
             VaderUI:Notify({Title = "Vader Script", Content = "Select a unit to reroll first.", Duration = 2.5})
@@ -2275,7 +2303,7 @@ for _, g in ipairs(serverProtectList) do
     State.ProtectedGrades[g] = getter and getter() == true or false
     secGradeServerProtect:AddToggle("TogServerProt_" .. g, {
         Title       = "Lock Grade " .. (({["神"] = "God", ["∞"] = "Infinity"})[g] or g),
-        Description = "Protect grade " .. (({["神"] = "God", ["∞"] = "Infinity"})[g] or g) .. " on the server",
+        Description = "Lock on server.",
         Default     = State.ProtectedGrades[g],
         Callback    = function(val)
             State.ProtectedGrades[g] = val
@@ -2299,15 +2327,15 @@ table.sort(traitTargetOptions, function(a,b) return TraitsModule[a].order < Trai
 
 local secTrait = Tabs.Traits:AddSection("Auto Reroll")
 secTrait:AddParagraph({Title="Trait Guide",
-    Content="Each roll costs 1 Trait Reroll item. Stop at the target or stronger bonuses of the same type. Locked traits are kept."})
+    Content="1 Trait Reroll per roll."})
 local dropTraitUnitRef = secTrait:AddDropdown("DropTraitUnit", {
-    Title="Select Unit", Description="Choose an inventory unit to reroll.",
+    Title="Select Unit", Description="Unit to reroll.",
     Values=traitLabels, Default=traitLabels[1],
     Callback=function(label)
         State.TargetTraitUnitKey = traitUnitIdMap[label] or ""
     end
 })
-secTrait:AddButton({Title="Refresh Units",Description="Refresh inventory units and their traits.",
+secTrait:AddButton({Title="Refresh Units",Description="Reload trait units.",
     Callback=function()
         traitLabels, traitUnitIdMap = getInventoryUnitOptions("trait")
         dropTraitUnitRef:SetValues(traitLabels)
@@ -2324,20 +2352,20 @@ secTrait:AddButton({Title="Refresh Units",Description="Refresh inventory units a
         VaderUI:Notify({Title="Vader Script",Content="Trait unit list refreshed.",Duration=2})
     end})
 secTrait:AddDropdown("DropTargetTrait",{Title="Target Trait",
-    Description="Stop at this trait or stronger bonuses of the same type.",
+    Description="This trait or stronger.",
     Values=traitTargetOptions,Default=State.TargetTrait,
     Callback=function(value) if TraitsModule[value] then State.TargetTrait=value end end})
 secTrait:AddSlider("SlideTraitDelay",{Title="Reroll Interval (seconds)",
-    Description="Time between trait reroll checks.",Min=0.15,Max=1,Default=State.TraitRollDelay,Rounding=2,
+    Description="Trait roll delay.",Min=0.15,Max=1,Default=State.TraitRollDelay,Rounding=2,
     Callback=function(value) State.TraitRollDelay=value end})
 secTrait:AddToggle("TogAutoRerollTrait",{Title="Auto Reroll",
-    Description="Reroll until the target is reached, a locked trait is found, or items run out.",Default=false,
+    Description="Roll to target trait.",Default=false,
     Callback=function(value)
         State.AutoRerollTrait=value
         VaderUI:Notify({Title="Vader Script",Content=value and "Auto Trait Reroll enabled." or "Auto Trait Reroll disabled.",Duration=2})
     end})
 local secTraitManual=Tabs.Traits:AddSection("Manual Reroll")
-secTraitManual:AddButton({Title="Reroll 1x",Description="Reroll the selected unit once for 1 Trait Reroll item.",
+secTraitManual:AddButton({Title="Reroll 1x",Description="Roll once for 1 item.",
     Callback=function()
         local ok,reason=rollTraitForSelectedUnit()
         VaderUI:Notify({Title=ok and "Trait Reroll" or "Trait Reroll Stopped",Content=reason,Duration=3})
@@ -2350,7 +2378,7 @@ for _, name in ipairs(traitTargetOptions) do
         local locked=getter and getter() == true or false
         State.ProtectedTraits[name]=locked
         secTraitLocks:AddToggle("TogTraitProt_"..name,{Title="Lock Trait "..name,
-            Description="Stop rerolling when this trait is found.",Default=locked,
+            Description="Stop on this trait.",Default=locked,
             Callback=function(value)
                 State.ProtectedTraits[name]=value
                 local currentGetter=DataController.ProtectedTraits and DataController.ProtectedTraits[name]
@@ -2373,15 +2401,15 @@ do
 
     local secQuirk = Tabs.Quirks:AddSection("Auto Reroll")
     secQuirk:AddParagraph({Title="Quirk Guide",
-        Content="Each roll costs money. Stop at the target or stronger buffs of the same type. Locked quirks are kept. Quirks only apply while the unit is on a podium."})
+        Content="Costs money. Podium units only."})
     local dropQuirkUnitRef = secQuirk:AddDropdown("DropQuirkUnit", {
-        Title="Select Unit", Description="Choose an inventory unit to reroll.",
+        Title="Select Unit", Description="Unit to reroll.",
         Values=Quirk.labels, Default=Quirk.labels[1],
         Callback=function(label)
             State.TargetQuirkUnitKey = Quirk.unitIdMap[label] or ""
         end
     })
-    secQuirk:AddButton({Title="Refresh Units",Description="Refresh inventory units and their quirks.",
+    secQuirk:AddButton({Title="Refresh Units",Description="Reload quirk units.",
         Callback=function()
             Quirk.labels, Quirk.unitIdMap = getInventoryUnitOptions("quirk")
             dropQuirkUnitRef:SetValues(Quirk.labels)
@@ -2398,20 +2426,20 @@ do
             VaderUI:Notify({Title="Vader Script",Content="Quirk unit list refreshed.",Duration=2})
         end})
     secQuirk:AddDropdown("DropTargetQuirk",{Title="Target Quirk",
-        Description="Stop at this quirk or stronger buffs of the same type.",
+        Description="This quirk or stronger.",
         Values=Quirk.targetOptions,Default=State.TargetQuirk,
         Callback=function(value) if Quirk.Defs[value] then State.TargetQuirk=value end end})
     secQuirk:AddSlider("SlideQuirkDelay",{Title="Reroll Interval (seconds)",
-        Description="Time between quirk reroll checks.",Min=0.15,Max=1,Default=State.QuirkRollDelay,Rounding=2,
+        Description="Quirk roll delay.",Min=0.15,Max=1,Default=State.QuirkRollDelay,Rounding=2,
         Callback=function(value) State.QuirkRollDelay=value end})
     secQuirk:AddToggle("TogAutoRerollQuirk",{Title="Auto Reroll",
-        Description="Reroll until the target is reached, a locked quirk is found, or money runs out.",Default=false,
+        Description="Roll to target quirk.",Default=false,
         Callback=function(value)
             State.AutoRerollQuirk=value
             VaderUI:Notify({Title="Vader Script",Content=value and "Auto Quirk Reroll enabled." or "Auto Quirk Reroll disabled.",Duration=2})
         end})
     local secQuirkManual=Tabs.Quirks:AddSection("Manual Reroll")
-    secQuirkManual:AddButton({Title="Reroll 1x",Description="Reroll the selected unit once.",
+    secQuirkManual:AddButton({Title="Reroll 1x",Description="Roll once.",
         Callback=function()
             local ok,reason=Quirk.roll()
             VaderUI:Notify({Title=ok and "Quirk Reroll" or "Quirk Reroll Stopped",Content=reason,Duration=3})
@@ -2423,7 +2451,7 @@ do
             local locked=getter and getter() == true or false
             State.ProtectedQuirks[name]=locked
             secQuirkLocks:AddToggle("TogQuirkProt_"..name,{Title="Lock Quirk "..name,
-                Description="Stop rerolling when this quirk is found.",Default=locked,
+                Description="Stop on this quirk.",Default=locked,
                 Callback=function(value)
                     State.ProtectedQuirks[name]=value
                     local currentGetter=DataController.ProtectedQuirks and DataController.ProtectedQuirks[name]
@@ -2435,11 +2463,233 @@ do
     end
 end
 
+-- Halloween event: uses the game's own event modules, so values follow future balance changes.
+do
+    local H = RS.Framework.Features:FindFirstChild("Halloween")
+    local function find(...)
+        local cur = network
+        for _, name in ipairs({...}) do cur = cur and cur:FindFirstChild(name) end
+        return cur
+    end
+    local function req(name)
+        local ok, m = pcall(function() return require(H[name]) end)
+        return ok and m or nil
+    end
+    local Ev = {
+        RollRF = find("PumpkinDiceService", "RF", "Roll"),
+        AutoSellRE = find("PumpkinDiceService", "RE", "SetAutoSell"),
+        QuestRE = find("HalloweenQuestService", "RE", "Claim"),
+        PassRE = find("HalloweenService", "RE", "ClaimAllPath"),
+        BuyRE = find("HalloweenService", "RE", "BuyOffer"),
+        TeleportRF = find("HalloweenService", "RF", "Teleport"),
+        KnockedRE = find("TrickOrTreatService", "RE", "Knocked"),
+        Dice = H and req("PumpkinDice"), Quests = H and req("HalloweenQuests"),
+        Shop = H and req("HalloweenShop"), House = H and req("HauntedHouse"),
+    }
+    local function amount(item)
+        local getter = DataController.Inventory and DataController.Inventory[item]
+        local data = getter and getter()
+        return data and tonumber(data.amount) or 0
+    end
+    local function stopToggle(id, title, message)
+        local toggle = VaderUI.Options[id]
+        if toggle then toggle:SetValue(false) end
+        VaderUI:Notify({Title=title, Content=message, Duration=3})
+    end
+
+    if not H then
+        Tabs.Event:AddSection("Event"):AddParagraph({Title="No Event", Content="No event is running."})
+    end
+
+    -- Pumpkin Dice: the server allows one roll per 2s and costs Pumpkins.
+    if Ev.RollRF and Ev.Dice then
+        local sec = Tabs.Event:AddSection("Pumpkin Dice")
+        sec:AddToggle("TogEventPumpkin", {Title="Auto Pumpkin Dice", Description=Ev.Dice.COST .. " Pumpkins per roll.",
+            Default=false, Callback=function(v) State.EventPumpkinRoll = v end})
+        sec:AddToggle("TogEventPumpkinMulti", {Title="Roll " .. Ev.Dice.MULTI .. "x", Description="Several dice per roll.",
+            Default=false, Callback=function(v) State.EventPumpkinMulti = v end})
+        if Ev.AutoSellRE then
+            local names, sold = {}, {}
+            for _, unit in ipairs(Ev.Dice.Units) do
+                table.insert(names, unit.id)
+                local getter = DataController.Halloween and DataController.Halloween.DiceAutoSell
+                    and DataController.Halloween.DiceAutoSell[unit.id]
+                sold[unit.id] = getter and getter() == true or nil
+            end
+            sec:AddDropdown("DropEventAutoSell", {Title="Auto Sell", Description="Game sells these on roll.",
+                Values=names, Multi=true, Default=sold,
+                Callback=function(selected)
+                    task.spawn(function()
+                        for _, name in ipairs(names) do
+                            local want = selected[name] == true
+                            if (sold[name] == true) ~= want then
+                                sold[name] = want or nil
+                                Ev.AutoSellRE:FireServer(name, want)
+                                task.wait(0.25) -- server debounce is 0.2s
+                            end
+                        end
+                    end)
+                end})
+        end
+        task.spawn(function()
+            while isCurrentRun() do
+                task.wait(2.6)
+                if State.EventPumpkinRoll then
+                    local count = State.EventPumpkinMulti and Ev.Dice.MULTI or 1
+                    if amount("Pumpkins") >= Ev.Dice.COST * count then
+                        local ok, res = pcall(function() return Ev.RollRF:InvokeServer(count) end)
+                        if ok and type(res) == "table" and res.ok == false and res.message then
+                            State.EventPumpkinRoll = false
+                            stopToggle("TogEventPumpkin", "Pumpkin Dice Stopped", res.message)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Haunted House wings are towers, so this drives the existing Auto Tower controls.
+    if Ev.House then
+        local sec = Tabs.Event:AddSection("Haunted House")
+        local wings = {}
+        for _, wing in ipairs(Ev.House.Wings) do table.insert(wings, wing.name) end
+        sec:AddDropdown("DropEventWing", {Title="Wing", Description="Wing to farm.", Values=wings,
+            Default=State.EventHouseWing, Callback=function(v) State.EventHouseWing = v end})
+        sec:AddToggle("TogEventHouse", {Title="Auto Haunted House", Description="Farms Pumpkins and Candy.", Default=false,
+            Callback=function(v)
+                local opt = VaderUI.Options
+                if v and opt.DropSelectTower then opt.DropSelectTower:SetValue(State.EventHouseWing) end
+                if opt.TogAutoTower then opt.TogAutoTower:SetValue(v) end
+            end})
+    end
+
+    -- Trick or Treat: the server counts a knock only while standing near a door,
+    -- with a 30s cooldown per door and no faster than 60 studs/s between doors.
+    if Ev.KnockedRE then
+        local CollectionService = game:GetService("CollectionService")
+        local sec = Tabs.Event:AddSection("Trick or Treat")
+        sec:AddToggle("TogEventTreat", {Title="Auto Trick or Treat", Description="Visits doors for Candy.", Default=false,
+            Callback=function(v) State.EventTrickOrTreat = v end})
+        if Ev.TeleportRF then
+            sec:AddButton({Title="Go to Island", Description="Event island.",
+                Callback=function() pcall(function() Ev.TeleportRF:InvokeServer("Island") end) end})
+            sec:AddButton({Title="Back to Hub", Description="Main area.",
+                Callback=function() pcall(function() Ev.TeleportRF:InvokeServer("Hub") end) end})
+        end
+        local knocked = false
+        table.insert(_conns, Ev.KnockedRE.OnClientEvent:Connect(function() knocked = true end))
+        task.spawn(function()
+            local readyAt, lastKnock, lastPos = {}, 0, nil
+            while isCurrentRun() do
+                task.wait(0.5)
+                local character = LP.Character
+                if State.EventTrickOrTreat and character and character:FindFirstChild("HumanoidRootPart")
+                    and workspace:GetServerTimeNow() >= (LP:GetAttribute("TrickOrTreatReadyAt") or 0) then
+                    local doors = CollectionService:GetTagged("TrickOrTreatDoor")
+                    if #doors == 0 and Ev.TeleportRF then
+                        pcall(function() Ev.TeleportRF:InvokeServer("Island") end)
+                        task.wait(2)
+                    end
+                    for _, door in ipairs(doors) do
+                        if not (State.EventTrickOrTreat and isCurrentRun()) then break end
+                        if door:IsA("BasePart") and os.clock() >= (readyAt[door] or 0) then
+                            character = LP.Character
+                            if not (character and character:FindFirstChild("HumanoidRootPart")) then break end
+                            -- Arrive at once and stand until the server's travel gap passes; it knocks as soon as it does.
+                            local gap = lastPos and math.max(2, (door.Position - lastPos).Magnitude / 60) - (os.clock() - lastKnock) or 0
+                            local front = door:GetAttribute("TrickOrTreatFront") or door.CFrame.LookVector
+                            knocked = false
+                            character:PivotTo(CFrame.new(door.Position + front * 5, door.Position))
+                            local arrived = os.clock()
+                            while not knocked and os.clock() - arrived < math.max(gap, 0) + 0.8 do task.wait(0.05) end
+                            if knocked then
+                                -- The candy is granted server-side, so there is no need to stay for the animation.
+                                lastKnock, lastPos = os.clock(), door.Position
+                                readyAt[door] = os.clock() + 31
+                            else
+                                readyAt[door] = os.clock() + 10
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Claims: quests, Pumpkin Pass, and the Candy Shop.
+    local sec = H and Tabs.Event:AddSection("Rewards")
+    if sec and Ev.QuestRE and Ev.Quests then
+        sec:AddToggle("TogEventQuests", {Title="Auto Event Quests", Description="Hourly and daily.", Default=false,
+            Callback=function(v) State.EventQuests = v end})
+        task.spawn(function()
+            while isCurrentRun() do
+                task.wait(2)
+                if State.EventQuests and DataController.Halloween then
+                    for _, period in ipairs(Ev.Quests.PERIODS) do
+                        pcall(function()
+                            local config = Ev.Quests[period]
+                            local data = DataController.Halloween[config.dataKey]()
+                            if type(data) ~= "table" then return end
+                            local progress, claimed = data.progress or {}, data.claimed or {}
+                            for _, quest in ipairs(config.pool) do
+                                if table.find(data.ids or {}, quest.id) and not claimed[quest.id]
+                                    and (progress[quest.id] or 0) >= quest.target then
+                                    Ev.QuestRE:FireServer(period, quest.id)
+                                    task.wait(0.3)
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        end)
+    end
+    if sec and Ev.PassRE then
+        sec:AddToggle("TogEventPass", {Title="Auto Pumpkin Pass", Description="Claims unlocked tiers.", Default=false,
+            Callback=function(v) State.EventPass = v end})
+        task.spawn(function()
+            while isCurrentRun() do
+                -- The server skips tiers that are locked or already claimed.
+                if State.EventPass then pcall(function() Ev.PassRE:FireServer() end) end
+                task.wait(30)
+            end
+        end)
+    end
+    if sec and Ev.BuyRE and Ev.Shop then
+        local labels, indexOf = {}, {}
+        for i, offer in ipairs(Ev.Shop) do
+            local label = offer.name .. " (" .. offer.candy .. ")"
+            table.insert(labels, label)
+            indexOf[label] = i
+        end
+        sec:AddDropdown("DropEventShop", {Title="Candy Shop", Description="Items to buy.", Values=labels, Multi=true,
+            Default=State.EventShopItems, Callback=function(v) State.EventShopItems = v end})
+        sec:AddToggle("TogEventShop", {Title="Auto Buy", Description="Spends Candy on selected items.", Default=false,
+            Callback=function(v) State.EventShopAuto = v end})
+        task.spawn(function()
+            while isCurrentRun() do
+                task.wait(3)
+                if State.EventShopAuto then
+                    local candy = amount("Candy")
+                    for label, selected in pairs(State.EventShopItems) do
+                        local index = indexOf[label]
+                        if selected and index and candy >= Ev.Shop[index].candy then
+                            candy = candy - Ev.Shop[index].candy
+                            Ev.BuyRE:FireServer(index)
+                            task.wait(0.3)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end
+
 local secUpgrades = Tabs.Upgrades:AddSection("Upgrades")
 
 secUpgrades:AddToggle("TogAutoUpgrades", {
     Title       = "Auto Upgrades",
-    Description = "Buy upgrades in selected categories when affordable.",
+    Description = "Buy when affordable.",
     Default     = false,
     Callback    = function(v) State.AutoUpgrades = v end
 })
@@ -2463,7 +2713,7 @@ local defaultSelections = {
 
 local dropUpgradeFocus = secUpgrades:AddDropdown("DropUpgradeFocus", {
     Title       = "Focus Categories",
-    Description = "Choose categories to purchase first.",
+    Description = "Buy these first.",
     Values      = upgradeOptions,
     Multi       = true,
     Default     = defaultSelections,
@@ -2483,7 +2733,7 @@ local dropUpgradeFocus = secUpgrades:AddDropdown("DropUpgradeFocus", {
 
 secUpgrades:AddToggle("TogOnlySelected", {
     Title       = "Only Selected",
-    Description = "Buy only upgrades in the selected categories.",
+    Description = "Skip other categories.",
     Default     = false,
     Callback    = function(v) State.OnlySelectedUpgrades = v end
 })
@@ -2500,7 +2750,7 @@ local secDice = Tabs.Upgrades:AddSection("Dice Shop")
 
 secDice:AddToggle("TogAutoBuyDice", {
     Title       = "Auto Buy Dice",
-    Description = "Buy unowned dice when affordable.",
+    Description = "Buy new dice.",
     Default     = false,
     Callback    = function(v) State.AutoBuyDice = v end
 })
@@ -2517,14 +2767,14 @@ local secWebhook = Tabs.Webhook:AddSection("Discord Webhook Settings")
 
 secWebhook:AddParagraph({
     Title   = "Discord Notifications",
-    Content = "Enter a Discord webhook URL for live roll alerts and statistics summaries."
+    Content = "Roll alerts and summaries."
 })
 
 local inputWebhookRef = nil
 
 inputWebhookRef = secWebhook:AddInput("InputWebhookUrl", {
     Title       = "Discord Webhook URL",
-    Description = "Paste your Discord webhook URL here.",
+    Description = "Webhook link.",
     Default     = State.WebhookURL,
     Placeholder = "https://discord.com/api/webhooks/...",
     Numeric     = false,
@@ -2536,7 +2786,7 @@ inputWebhookRef = secWebhook:AddInput("InputWebhookUrl", {
 
 secWebhook:AddButton({
     Title       = "Confirm URL",
-    Description = "Save and validate the URL; useful on mobile.",
+    Description = "Save the link.",
     Callback    = function()
         local currentVal = (inputWebhookRef and inputWebhookRef.Value) or (VaderUI.Options and VaderUI.Options.InputWebhookUrl and VaderUI.Options.InputWebhookUrl.Value) or State.WebhookURL
         local clean = string.gsub(currentVal or "", "%s+", "")
@@ -2563,7 +2813,7 @@ secWebhook:AddButton({
 
 secWebhook:AddButton({
     Title       = "Paste Clipboard",
-    Description = "Paste the URL from your clipboard.",
+    Description = "Paste link.",
     Callback    = function()
         local pasteFn = getclipboard or (Clipboard and Clipboard.get)
         if pasteFn then
@@ -2592,7 +2842,7 @@ secWebhook:AddButton({
 
 secWebhook:AddToggle("TogWebhookEnabled", {
     Title       = "Enable",
-    Description = "Send notifications to Discord.",
+    Description = "Send alerts.",
     Default     = false,
     Callback    = function(v)
         State.WebhookEnabled = v
@@ -2606,7 +2856,7 @@ secWebhook:AddToggle("TogWebhookEnabled", {
 
 secWebhook:AddButton({
     Title       = "Test Webhook",
-    Description = "Send a test message to Discord.",
+    Description = "Send a test.",
     Callback    = function()
         if not State.WebhookURL or State.WebhookURL == "" then
             VaderUI:Notify({Title = "Vader Script", Content = "Enter a webhook URL before testing.", Duration = 2.5})
@@ -2634,7 +2884,7 @@ local secWebhookEvents = Tabs.Webhook:AddSection("Event Alerts")
 
 secWebhookEvents:AddToggle("TogNotifRolls", {
     Title       = "High Rolls",
-    Description = "Report unit, grade, and trait details to Discord.",
+    Description = "Alert on rare units.",
     Default     = true,
     Callback    = function(v) State.WebhookNotifyRolls = v end
 })
@@ -2643,7 +2893,7 @@ local webhookRarityOptions = table.clone(sellRarityOptions)
 
 secWebhookEvents:AddDropdown("DropMinRarity", {
     Title       = "Min Rarity",
-    Description = "Set the minimum rarity for notifications.",
+    Description = "Lowest rarity to alert.",
     Values      = webhookRarityOptions,
     Default     = "Mythical",
     Callback    = function(v) State.WebhookMinRarity = v end
@@ -2651,34 +2901,34 @@ secWebhookEvents:AddDropdown("DropMinRarity", {
 
 secWebhookEvents:AddToggle("TogNotifRebirth", {
     Title       = "Rebirth Alert",
-    Description = "Report new rebirth levels and bonuses.",
+    Description = "Alert on rebirth.",
     Default     = true,
     Callback    = function(v) State.WebhookNotifyRebirth = v end
 })
 
 secWebhookEvents:AddToggle("TogNotifGrade", {
     Title       = "High Grade",
-    Description = "Report grades S, S+, Z, Z+, God, and Infinity.",
+    Description = "Alert on grade S and up.",
     Default     = true,
     Callback    = function(v) State.WebhookNotifyGrade = v end
 })
 
 secWebhookEvents:AddToggle("TogNotifTrait",{Title="Rare Trait",
-    Description="Report rare trait rerolls to Discord.",Default=true,
+    Description="Alert on rare traits.",Default=true,
     Callback=function(value) State.WebhookNotifyTrait=value end})
 
 local secWebhookSummary = Tabs.Webhook:AddSection("Periodic Summary")
 
 secWebhookSummary:AddToggle("TogWebhookSummary", {
     Title       = "Auto Summary",
-    Description = "Send scheduled cash, rebirth, and unit summaries.",
+    Description = "Timed stats.",
     Default     = false,
     Callback    = function(v) State.WebhookPeriodicSummary = v end
 })
 
 secWebhookSummary:AddSlider("SlideSummaryInterval", {
     Title       = "Summary Interval (minutes)",
-    Description = "Time between summaries: 5-60 minutes.",
+    Description = "5-60 minutes.",
     Min         = 5,
     Max         = 60,
     Default     = State.WebhookSummaryInterval,
@@ -2688,7 +2938,7 @@ secWebhookSummary:AddSlider("SlideSummaryInterval", {
 
 secWebhookSummary:AddButton({
     Title       = "Send Summary Now",
-    Description = "Send your current statistics to Discord now.",
+    Description = "Send stats now.",
     Callback    = function()
         if not State.WebhookURL or State.WebhookURL == "" then
             VaderUI:Notify({Title = "Vader Script", Content = "Enter a webhook URL before sending a summary.", Duration = 2.5})
@@ -2927,6 +3177,16 @@ local function loadConfigFile(configName)
         end
         if opt.TogAutoRerollQuirk then opt.TogAutoRerollQuirk:SetValue(State.AutoRerollQuirk) end
 
+        -- Event Tab
+        if opt.TogEventPumpkin then opt.TogEventPumpkin:SetValue(State.EventPumpkinRoll) end
+        if opt.TogEventPumpkinMulti then opt.TogEventPumpkinMulti:SetValue(State.EventPumpkinMulti) end
+        if opt.DropEventWing then opt.DropEventWing:SetValue(State.EventHouseWing) end
+        if opt.TogEventTreat then opt.TogEventTreat:SetValue(State.EventTrickOrTreat) end
+        if opt.TogEventQuests then opt.TogEventQuests:SetValue(State.EventQuests) end
+        if opt.TogEventPass then opt.TogEventPass:SetValue(State.EventPass) end
+        if opt.DropEventShop then opt.DropEventShop:SetValue(State.EventShopItems) end
+        if opt.TogEventShop then opt.TogEventShop:SetValue(State.EventShopAuto) end
+
         -- Upgrades Tab
         if opt.TogAutoUpgrades then opt.TogAutoUpgrades:SetValue(State.AutoUpgrades) end
         if opt.DropUpgradeFocus then opt.DropUpgradeFocus:SetValue(State.SelectedUpgradeCategories) end
@@ -2975,7 +3235,7 @@ end
 
 secTheme:AddButton({
     Title       = "Unload UI",
-    Description = "Save your profile, stop automation, and close the UI.",
+    Description = "Save and close.",
     Callback    = function()
         if _G.AnimeDiceCleanup then
             _G.AnimeDiceCleanup()
@@ -2987,7 +3247,7 @@ local secAfk = Tabs.Settings:AddSection("Anti-AFK")
 
 secAfk:AddToggle("TogAntiAFK", {
     Title       = "Anti-AFK",
-    Description = "Prevent idle disconnections.",
+    Description = "Stay connected.",
     Default     = true,
     Callback    = function(v) State.AntiAFK = v end
 })
@@ -2999,7 +3259,7 @@ secCommunity:AddParagraph({
 })
 secCommunity:AddButton({
     Title = "Copy Discord Invite",
-    Description = "Copy the Discord invite to your clipboard.",
+    Description = "Copy invite.",
     Callback = function()
         local copy = setclipboard or toclipboard or (Clipboard and Clipboard.set)
         if type(copy) == "function" then
