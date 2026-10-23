@@ -1817,8 +1817,9 @@ local BaseConfig = require(Configs.BaseConfig)
 local DamageUpgradeConfig = require(Configs.DamageUpgradeConfig)
 local SpeedUpgradeConfig = require(Configs.SpeedUpgradeConfig)
 local BloodConfig = require(Configs.BloodTransfusionConfig)
+local GameConfig = require(Configs.GameConfig)
 
-local RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical", "Divine", "Secret", "Cosmic" }
+local RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical", "Divine", "Secret", "Cosmic", "Halloween" }
 local ZONES = {}
 for _, rarity in ipairs(RARITIES) do
     if AreaConfig[rarity .. "Area"] then table.insert(ZONES, rarity .. "Area") end
@@ -2228,6 +2229,7 @@ local Tabs = {
     Farm = Window:AddTab({ Title = "Auto Farm" }),
     Upgrade = Window:AddTab({ Title = "Auto Upgrade" }),
     Shop = Window:AddTab({ Title = "Sell & Buy" }),
+    Event = Window:AddTab({ Title = "Event" }),
     Info = Window:AddTab({ Title = "Info" }),
     Settings = Window:AddTab({ Title = "Settings" }),
 }
@@ -2330,6 +2332,18 @@ Weapons:AddButton({
     Callback = function() task.spawn(weaponStep, false) end,
 })
 
+-- free spins come from play time; buying more spins is a Robux product, never called here
+local function freeSpins()
+    local data = getValue("EventData")
+    local event = type(data) == "table" and GameConfig.Event and data[GameConfig.Event]
+    return type(event) == "table" and tonumber(event.SpinCount) or 0
+end
+local EventSection = Tabs.Event:AddSection("Halloween")
+EventSection:AddToggle("AutoSpin", {
+    Title = "Auto Spin", Default = false,
+    Callback = function(value) State.AutoSpin = value end,
+})
+
 local InfoBox = Tabs.Info:AddSection("Player"):AddParagraph({ Title = "Stats", Content = "Loading..." })
 
 local function loop(interval, step)
@@ -2343,6 +2357,9 @@ local function loop(interval, step)
 end
 loop(0.15, farmStep)
 loop(1, upgradeStep)
+loop(5, function()
+    if State.AutoSpin and freeSpins() > 0 then invoke("Spin") end
+end)
 loop(3, function()
     if State.AutoSell then sellStep() end
     if State.AutoBuyWeapon then weaponStep(true) end
