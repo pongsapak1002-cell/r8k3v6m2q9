@@ -1908,25 +1908,16 @@ local function Vader_MakeLibrary()
     -- one short line per control, shown instead of the game code's long tooltips
     local ShortTips = {
         PerfectRate = "Share of perfect throws",
-        IndexHunt = "Prefer fish missing from your index",
-        SmartSell = "Sells when the backpack is full",
         SellAt = "0 = off",
         SellEvery = "0 = off",
-        BuyBait = "Buys bait within the budget",
         BaitBudget = "Max bait cost per cast",
-        AutoPond = "Collects, fills and feeds the pond",
-        AutoRewards = "Daily, free roll, playtime, season, achievements, offline, group, referral",
-        AutoBigMouth ="Feeds the Big Mouth every 12h",
-        AutoEnchant = "Rolls until a picked enchant",
-        AutoMutate = "Mutates your best fish",
-        AutoPets = "Hatches eggs at your pond, equips the best pet",
-        AutoCargo = "Fills, sends and claims the cargo boat",
-        AutoMaze = "World 2: Sand Key, Plesiosaur, Megalodon, Duneworm Colossus, Duskfang Scorpion, Chrono Rod (2.5T)",
-        AutoCave = "World 3: Frozen Key, Blue Whale, Frost Serpent, Tuskbreaker Narwhal, Glacierback Ankylos, Frostbite Rod (15T)",
-        AutoVolcano = "World 4: Lava Key, 4 levers, Emberback Caldera, Anvilhead Forgeshark, Cindermaw Angler, Anchorbone Reaper, Magma Rod (60T)",
         BaitPick = "Empty = any bait in the budget",
-        KeepOnTeleport = "Re-runs the script after a server change",
-        WebhookCard = "One message, updated every 2 min",
+        CraftPotionType = "Ultra = 25 shards, x2 effect",
+        AutoHollow = "Needs Auto Fish",
+        MerchantPick = "Empty = buys nothing",
+        AutoMaze = "Chrono Rod (2.5T)",
+        AutoCave = "Frostbite Rod (15T)",
+        AutoVolcano = "Magma Rod (60T)",
         WebhookReport = "0 = off",
     }
 
@@ -2747,6 +2738,9 @@ do
 		Maze = true,
 		Cave = true,
 		Volcano = true,
+		Craft = true,
+		HorsemanQuest = true,
+		Merchant = true,
 	}
 	local Functions = { Sell = true, SellAll = true }
 	-- The fishing loop logs its own CAST/HOOK lines, these stay out of the SEND lines.
@@ -2764,6 +2758,9 @@ do
 		Maze = { GiveKey = true, PlaceFish = true, ClaimRod = true },
 		Cave = { GiveKey = true, PlaceFish = true, ClaimRod = true },
 		Volcano = { GiveKey = true, PullLever = true, PlaceFish = true, ClaimRod = true },
+		Craft = { Craft = true, Collect = true },
+		HorsemanQuest = { Accept = true, Pickup = true, Give = true },
+		Merchant = { Open = true, Buy = true },
 	}
 	N.Sent = { count = 0, byName = {}, window = {}, recent = {} }
 	function N.remoteExists(name)
@@ -3089,12 +3086,56 @@ do
 		return N.tab("UnlockedWorlds")[key] == true
 	end
 	-- Fishing worlds unlocked, best (highest number) first.
+	-- Update 11: event rods and baits (Haunted Hollow) only work in their event world and are bought with its currency
+	function N.isEventGear(name)
+		local G = N.sh("Config.EventGearConfig")
+		if type(G) ~= "table" or type(G.SetOf) ~= "function" then
+			return false
+		end
+		local ok, set = pcall(G.SetOf, name)
+		return ok and set ~= nil
+	end
+	-- true when a rod or bait works in the current world: event gear in its event world, normal gear everywhere else
+	function N.gearFitsHere(name)
+		local G = N.sh("Config.EventGearConfig")
+		if type(G) ~= "table" or type(G.SetOf) ~= "function" or type(G.SetHere) ~= "function" then
+			return true
+		end
+		local okS, set = pcall(G.SetOf, name)
+		local okH, here = pcall(G.SetHere, N.data())
+		return (if okS then set else nil) == (if okH then here else nil)
+	end
+	function N.inHollow()
+		local w = N.worldCfg()
+		return w ~= nil and w.Currency ~= nil
+	end
+	function N.candy()
+		return tonumber(N.data().CandyCorn) or 0
+	end
+	function N.eventLive()
+		local C = N.sh("Config.CandyConfig")
+		local ok, live = pcall(function()
+			return C.Live()
+		end)
+		return ok and live == true
+	end
+	-- the event world key (Halloween)
+	function N.eventWorld()
+		local W = N.sh("Config.WorldsConfig")
+		for key, w in pairs(type(W) == "table" and type(W.Worlds) == "table" and W.Worlds or {}) do
+			if w.Currency then
+				return key
+			end
+		end
+		return nil
+	end
 	function N.bestFishingWorld()
 		local best, bestNumber = "World 1", 1
 		for key, yes in pairs(N.tab("UnlockedWorlds")) do
 			local n = N.worldNumber(key)
 			local w = N.worldCfg(key)
-			if yes and w and not w.NoFishing and n > bestNumber then
+			-- event worlds (their own currency, cursed normal gear) are never the auto fishing world
+			if yes and w and not w.NoFishing and not w.Currency and n > bestNumber then
 				best, bestNumber = key, n
 			end
 		end
@@ -5331,7 +5372,7 @@ do
 			for name, def in pairs(rods.Items) do
 				local price = tonumber(def.Price) or 0
 				local need = N.worldNumber(def.RequiredWorld or "World 1")
-				if not owned[name] and price > 0 and not def.MazeOnly and not def.CaveOnly and need <= bestNumber then
+				if not owned[name] and price > 0 and not def.MazeOnly and not def.CaveOnly and need <= bestNumber and not N.isEventGear(name) then
 					local g = gain({ rod = name })
 					if not g then
 						local l, s = rodPower(name)
@@ -5593,12 +5634,12 @@ do
 		for name in pairs(N.tab("Rods")) do
 			local l, s = rodPower(name)
 			local score = l * 2 + s
-			if not bestScore or score > bestScore then
+			if N.gearFitsHere(name) and (not bestScore or score > bestScore) then
 				best, bestScore = name, score
 			end
 		end
 		local curL, curS = rodPower(d.RodEquipped or "Wooden Rod")
-		if best and best ~= d.RodEquipped and bestScore > curL * 2 + curS then
+		if best and best ~= d.RodEquipped and N.gearFitsHere(best) and (not N.gearFitsHere(d.RodEquipped) or bestScore > curL * 2 + curS) then
 			send("RodShop", "Equip", best)
 			log("ROD equip", best)
 			return true
@@ -5752,7 +5793,8 @@ do
 	end
 	-- Go fishing in the best unlocked world (Auto Worlds / planner).
 	function N.worldStep()
-		local hunt = N.dungeonWorld and N.dungeonWorld()
+		-- Haunted Hollow (Auto Hollow, or the Horseman's fished pieces) first, then a missing dungeon fish
+		local hunt = (N.hollowWanted and N.hollowWanted() and N.eventWorld()) or (N.dungeonWorld and N.dungeonWorld())
 		if not (on("AutoWorlds") or N.planner() or hunt) then
 			return false
 		end
@@ -5762,7 +5804,12 @@ do
 			return false
 		end
 		if best ~= cur and not (N.worldCfg(cur) and N.worldCfg(cur).NoFishing and N.Pond.busy) then
-			return N.travel(best)
+			local ok = N.travel(best)
+			if ok then
+				-- the right rod for this world (event rods in the Hollow, normal ones elsewhere)
+				N.equipBestRod()
+			end
+			return ok
 		end
 		return false
 	end
@@ -5887,7 +5934,7 @@ do
 		for _, entry in ipairs(N.itemsOf("Bait")) do
 			local def = defs[entry.item.Name]
 			local luck = def and tonumber(def.Luck) or 0
-			if not bestGuid or luck > bestLuck then
+			if N.gearFitsHere(entry.item.Name) and (not bestGuid or luck > bestLuck) then
 				bestGuid, bestLuck = entry.guid, luck
 				bestAmount = tonumber(type(entry.item.Data) == "table" and entry.item.Data.Amount) or 1
 			end
@@ -5915,7 +5962,7 @@ do
 			-- the player's list: the strongest picked bait that is affordable and in stock
 			for name in pairs(chosen) do
 				local def = defs[name]
-				local price = def and tonumber(def.Price) or math.huge
+				local price = if def and not N.isEventGear(name) then (tonumber(def.Price) or math.huge) else math.huge
 				if def and price * 2 <= free and (N.Shop.stockOut[name] or 0) < os.clock() and (not pick or (tonumber(def.Luck) or 0) > pickLuck) then
 					pick, pickLuck = name, tonumber(def.Luck) or 0
 				end
@@ -5923,7 +5970,7 @@ do
 		elseif base and none then
 			local pickNet
 			for name, def in pairs(defs) do
-				local price = tonumber(def.Price) or math.huge
+				local price = if N.isEventGear(name) then math.huge else (tonumber(def.Price) or math.huge)
 				if price * 2 <= free and (N.Shop.stockOut[name] or 0) < os.clock() then
 					local c = N.castModel({ bait = def })
 					local net = if c then (c - none) * K - price / 5 else -1
@@ -5934,7 +5981,7 @@ do
 			end
 		else
 			for name, def in pairs(defs) do
-				local price = tonumber(def.Price) or math.huge
+				local price = if N.isEventGear(name) then math.huge else (tonumber(def.Price) or math.huge)
 				if price / 5 <= budget and price * 2 <= free and (N.Shop.stockOut[name] or 0) < os.clock() and (not pick or (tonumber(def.Luck) or 0) > pickLuck) then
 					pick, pickLuck = name, tonumber(def.Luck) or 0
 				end
@@ -5995,7 +6042,8 @@ do
 			task.wait(0.5)
 		end
 		-- Food: the strongest food whose price stays under half an hour of pond income.
-		local PondMod = N.sh("Modules.Pond")
+		-- Update 11 moved the pond math into Modules.Pond.Sim (Modules.Pond is now a folder)
+		local PondMod = N.sh("Modules.Pond.Sim") or N.sh("Modules.Pond")
 		local foods = N.sh("Content.Item.Food")
 		local hourly = 0
 		pcall(function()
@@ -6423,6 +6471,408 @@ do
 		end
 		return false
 	end
+	--------------------------------------------------------------------------------------------------------------
+	-- Craft (Update 11 Workbench): the server takes Craft(recipeId, count) and Collect() from anywhere (no distance
+	-- check). One job per recipe; keys are unique (one at a time, never while one is held). Remote only, no movement.
+	local KeyFor = { SandKey = "Maze", FrozenKey = "Cave", LavaKey = "Volcano" }
+	local function stackOf(kind, name)
+		local n = 0
+		for _, item in pairs(N.inv()) do
+			if type(item) == "table" and item.Type == kind and item.Name == name then
+				n += tonumber(type(item.Data) == "table" and item.Data.Amount) or 1
+			end
+		end
+		return n
+	end
+	function N.craftStep()
+		if not (on("AutoCraftKeys") or on("AutoCraftPotions")) or not N.due("craft", 15) then
+			return false
+		end
+		local CC = N.sh("Config.CraftingConfig")
+		if type(CC) ~= "table" or type(CC.Recipes) ~= "table" then
+			return false
+		end
+		local jobs = type(N.data().CraftJobs) == "table" and N.data().CraftJobs or {}
+		local now = os.time()
+		local ready = false
+		for _, job in pairs(jobs) do
+			if type(job) == "table" and (tonumber(job.ReadyAt) or math.huge) <= now then
+				ready = true
+			end
+		end
+		if ready then
+			send("Craft", "Collect")
+			log("CRAFT collect")
+			task.wait(1)
+			jobs = type(N.data().CraftJobs) == "table" and N.data().CraftJobs or {}
+		end
+		local did = false
+		local function craft(recipe, count)
+			if jobs[recipe.Id] or count < 1 then
+				return
+			end
+			send("Craft", "Craft", recipe.Id, count)
+			log("CRAFT start", recipe.Id, "x" .. count)
+			did = true
+			task.wait(0.6)
+		end
+		for _, r in ipairs(CC.Recipes) do
+			local input = r.Inputs and r.Inputs[1]
+			if r.Category == "Keys" and on("AutoCraftKeys") and input and input.Item then
+				-- only a key a dungeon still waits for, never a second copy
+				local dungeon = KeyFor[r.Id]
+				local inserted = dungeon and N.tab(dungeon).KeyInserted
+				if not inserted and stackOf("Key", r.Output.Name) == 0 and stackOf(input.Type, input.Item) >= input.Amount then
+					craft(r, 1)
+				end
+			elseif r.Category == "Potions" and on("AutoCraftPotions") and input and input.Item then
+				local kind = string.match(input.Item, "^(%a+) Shard$")
+				local ultra = string.find(r.Id, "^Ultra") ~= nil
+				local mode = optionText("CraftPotionType", "Ultra first")
+				local wantType = (mode == "Ultra only" and ultra) or (mode == "Normal only" and not ultra) or mode == "Ultra first"
+				if kind and selected(Options.CraftPotions, kind) and wantType then
+					local have = stackOf(input.Type, input.Item)
+					-- Ultra first: the normal recipe only uses what the ultra one cannot (have < 25)
+					if mode == "Ultra first" and not ultra and have >= 25 then
+						have = have % 25
+					end
+					craft(r, math.min(math.floor(have / input.Amount), tonumber(CC.MaxBatch) or 25))
+				end
+			end
+		end
+		return did
+	end
+	--------------------------------------------------------------------------------------------------------------
+	-- Haunted Hollow (Update 11, event world with its own currency CandyCorn and its own gear): Auto Hollow fishes
+	-- there (the server swaps to the best owned event rod), Halloween Shop buys event upgrades, rods and baits with
+	-- CandyCorn at the Hollow's own booths.
+	function N.hollowWanted()
+		if not N.eventLive() or not N.eventWorld() then
+			return false
+		end
+		if on("AutoHollow") then
+			return true
+		end
+		-- the 3 fished ship pieces only bite in the Hollow
+		if on("AutoHorseman") then
+			local Q = N.sh("Config.HorsemanQuestConfig")
+			local q = N.tab("HorsemanQuest")
+			if type(Q) == "table" and not q.Claimed then
+				for _, piece in ipairs(Q.Fished or {}) do
+					if not (type(q.Pieces) == "table" and q.Pieces[piece]) then
+						return true
+					end
+				end
+			end
+		end
+		return false
+	end
+	function N.hollowShopStep()
+		if not on("HalloweenShop") or not N.inHollow() or not N.due("hollowShop", 8) then
+			return false
+		end
+		local key = N.worldKey()
+		local did = false
+		local function near(spotName)
+			local pos = N.spot(spotName)
+			if pos then
+				N.pauseFishing("hollow shop")
+				N.goTo(pos, 8)
+			end
+		end
+		-- upgrades (priced in CandyCorn here): the cheapest first
+		local U = N.sh("Config.UpgradesConfig")
+		if type(U) == "table" and type(U.Order) == "table" then
+			for _ = 1, 10 do
+				local pick, pickPrice
+				for _, stat in ipairs(U.Order) do
+					local ok, lv, mx, price = pcall(function()
+						local lv = U.LevelOf(N.data(), stat, key)
+						return lv, U.MaxLevelFor(stat, key), U.GetPrice(stat, lv, key)
+					end)
+					if ok and lv < mx and price and price <= N.candy() and (not pickPrice or price < pickPrice) then
+						pick, pickPrice = stat, price
+					end
+				end
+				if not pick then
+					break
+				end
+				if not did then
+					near("Upgrades")
+				end
+				local before = N.candy()
+				send("Upgrades", "Buy", pick)
+				if not waitFor(function()
+					return N.candy() < before
+				end, 3) then
+					break
+				end
+				log("HOLLOW upgrade", pick, "candy=" .. formatNumber(pickPrice))
+				did = true
+			end
+		end
+		-- rods: the next event rod in the game's order, then equip the best owned one
+		local G = N.sh("Config.EventGearConfig")
+		local set = G and G.Worlds and G.Worlds[key]
+		local rods = N.sh("Content.Item.Rod")
+		if set and rods and type(rods.Items) == "table" then
+			for _, name in ipairs(set.Rods or {}) do
+				local def = rods.Items[name]
+				local price = tonumber(def and def.Price) or math.huge
+				if not N.tab("Rods")[name] and price > 0 then
+					if price <= N.candy() then
+						near("Rods")
+						send("RodShop", "Buy", name)
+						if waitFor(function()
+							return N.tab("Rods")[name] ~= nil
+						end, 3) then
+							log("HOLLOW rod", name, "candy=" .. formatNumber(price))
+							did = true
+						end
+					end
+					break
+				end
+			end
+			local best
+			for i = #(set.Rods or {}), 1, -1 do
+				if N.tab("Rods")[set.Rods[i]] then
+					best = set.Rods[i]
+					break
+				end
+			end
+			if best and N.data().RodEquipped ~= best then
+				send("RodShop", "Equip", best)
+				log("HOLLOW equip", best)
+			end
+		end
+		-- baits: keep the strongest affordable event bait in stock (10 at a time when it costs under 5% of the candy)
+		local baits = N.sh("Content.Item.Bait")
+		local hasEventBait = false
+		for _, e in ipairs(N.itemsOf("Bait")) do
+			if N.gearFitsHere(e.item.Name) then
+				hasEventBait = true
+			end
+		end
+		if set and baits and type(baits.Items) == "table" and not hasEventBait then
+			local pick, pickLuck, pickPrice
+			for _, name in ipairs(set.Baits or {}) do
+				local def = baits.Items[name]
+				local price = tonumber(def and def.Price) or math.huge
+				if price * 2 <= N.candy() and (not pick or (tonumber(def.Luck) or 0) > pickLuck) then
+					pick, pickLuck, pickPrice = name, tonumber(def.Luck) or 0, price
+				end
+			end
+			if pick then
+				local count = if pickPrice * 10 <= N.candy() * 0.05 then 10 else 2
+				near("Baits")
+				send("BaitShop", "Buy", pick, count)
+				log("HOLLOW bait", pick, "x" .. count)
+				did = true
+			end
+		end
+		if did then
+			N.resumeFishing()
+		end
+		return did
+	end
+	--------------------------------------------------------------------------------------------------------------
+	-- Spooky Merchant (always open in the Hollow, own stock per player, restocks every hour): Open rolls the stock,
+	-- Buy(visit, offer, count) within 40 studs of the Merchant model. Only the picked items are bought.
+	function N.merchantItems()
+		local M = N.sh("Config.MerchantConfig")
+		local G = N.sh("Config.EventGearConfig")
+		local ev = M and M.EventStock and M.EventStock.Halloween or {}
+		local list = {}
+		for _, b in ipairs(G and G.Worlds and G.Worlds.Halloween and G.Worlds.Halloween.Baits or {}) do
+			table.insert(list, b)
+		end
+		for name in pairs(ev.PotionPrices or {}) do
+			table.insert(list, name)
+		end
+		if ev.Rare and ev.Rare.Name then
+			table.insert(list, ev.Rare.Name)
+		end
+		for _, j in ipairs(ev.Jackpots or {}) do
+			table.insert(list, j.Name)
+		end
+		for _, n in ipairs(ev.Decor and ev.Decor.Names or {}) do
+			table.insert(list, n)
+		end
+		return list
+	end
+	function N.merchantStep()
+		if not on("AutoMerchant") or not N.eventLive() or not N.due("merchant", 30) then
+			return false
+		end
+		local M = N.sh("Config.MerchantConfig")
+		local shop = N.eventWorld()
+		if type(M) ~= "table" or not shop or not (M.AlwaysOpen and M.AlwaysOpen[shop]) then
+			return false
+		end
+		local picked = Options.MerchantPick and type(Options.MerchantPick.Value) == "table" and Options.MerchantPick.Value or {}
+		if not next(picked) then
+			return false
+		end
+		local okW, win = pcall(M.Window, N.serverTime(), shop)
+		if not okW or type(win) ~= "table" then
+			return false
+		end
+		local function stock()
+			local m = type(N.data().Merchants) == "table" and N.data().Merchants[shop]
+			return if type(m) == "table" and m.Visit == win.Visit then m else nil
+		end
+		local function wanted(m)
+			local list = {}
+			for i, offer in ipairs(m and m.Offers or {}) do
+				local money = if offer.Currency == "CandyCorn" then N.candy() else N.cash()
+				if picked[offer.Name] and (tonumber(offer.Stock) or 0) > 0 and (tonumber(offer.Price) or math.huge) <= money then
+					table.insert(list, { index = i, offer = offer })
+				end
+			end
+			return list
+		end
+		local m = stock()
+		-- the stock of this hour is known and holds nothing wanted: wait for the next restock
+		if m and #wanted(m) == 0 then
+			return false
+		end
+		if N.World.checkedVisit == win.Visit and not m then
+			return false
+		end
+		local back = N.worldKey()
+		if not N.travel(shop) then
+			return false
+		end
+		local model = N.spot(M.AlwaysOpen[shop].Model)
+		if model then
+			N.pauseFishing("merchant")
+			N.goTo(model, 10)
+		end
+		if not stock() then
+			send("Merchant", "Open")
+			waitFor(function()
+				return stock() ~= nil
+			end, 4)
+		end
+		N.World.checkedVisit = win.Visit
+		local bought = 0
+		for _, w in ipairs(wanted(stock())) do
+			send("Merchant", "Buy", win.Visit, w.index, tonumber(w.offer.Stock) or 1)
+			task.wait(1)
+			log("MERCHANT buy", w.offer.Name, "x" .. tostring(w.offer.Stock), formatNumber(w.offer.Price) .. " " .. tostring(w.offer.Currency or "Cash"))
+			bought += 1
+		end
+		N.resumeFishing()
+		if back ~= shop and not N.hollowWanted() then
+			N.travel(back)
+		end
+		return bought > 0
+	end
+	--------------------------------------------------------------------------------------------------------------
+	-- Headless Horseman Quest: Accept, then Pickup(piece) within 30 studs of each placed piece (World 1, World 2,
+	-- Hollow; the client shows the current world's pieces in Workspace.HorsemanPiecesLocal), the 3 fished pieces come
+	-- from casts in the Hollow (guaranteed by 60), Give hands everything in (no distance check). 10 = the Hollow Grin.
+	function N.horsemanStep()
+		if not on("AutoHorseman") then
+			return false
+		end
+		-- right after a pickup with more pieces in the same world: go on at once instead of waiting 20 s
+		if N.World.horsemanNext then
+			N.World.horsemanNext = false
+		elseif not N.due("horseman", 20) then
+			return false
+		end
+		local Q = N.sh("Config.HorsemanQuestConfig")
+		local q = N.tab("HorsemanQuest")
+		if type(Q) ~= "table" or not Q.Active or q.Claimed then
+			return false
+		end
+		if not q.Started then
+			send("HorsemanQuest", "Accept")
+			log("HORSEMAN accept")
+			return true
+		end
+		local pieces = type(q.Pieces) == "table" and q.Pieces or {}
+		local given = type(q.Given) == "table" and q.Given or {}
+		for _, name in ipairs(Q.Pieces or {}) do
+			if pieces[name] and not given[name] then
+				send("HorsemanQuest", "Give")
+				log("HORSEMAN give")
+				return true
+			end
+		end
+		N.World.pieceFail = N.World.pieceFail or {}
+		-- the pieces of the current world first, so one trip picks up every piece of a world
+		local order = {}
+		for name, world in pairs(Q.Placed or {}) do
+			table.insert(order, { name = name, world = world })
+		end
+		table.sort(order, function(a, b)
+			local ha, hb = a.world == N.worldKey(), b.world == N.worldKey()
+			if ha ~= hb then
+				return ha
+			end
+			return a.world < b.world
+		end)
+		for _, entry in ipairs(order) do
+			local name, world = entry.name, entry.world
+			local failedAt = N.World.pieceFail[name]
+			if not pieces[name] and not (failedAt and os.clock() - failedAt < 600) and (world ~= N.eventWorld() or N.eventLive()) and (N.unlocked(world) or world == N.eventWorld()) then
+				local back = N.worldKey()
+				if N.travel(world) then
+					local function find()
+						local localFolder = workspace:FindFirstChild("HorsemanPiecesLocal")
+						local m = localFolder and localFolder:FindFirstChild(name)
+						if not m then
+							local w = workspace:FindFirstChild("World")
+							local f = w and w:FindFirstChild(world)
+							local marker = f and f:FindFirstChild(Q.MarkerFolder or "HorsemanPieces", true)
+							m = marker and marker:FindFirstChild(name)
+						end
+						return m
+					end
+					local model = find()
+					local ok, cf = pcall(function()
+						return model:GetPivot()
+					end)
+					if ok and cf then
+						N.pauseFishing("horseman piece")
+						N.goTo(cf.Position, 6)
+						send("HorsemanQuest", "Pickup", name)
+						waitFor(function()
+							local p = N.tab("HorsemanQuest").Pieces
+							return type(p) == "table" and p[name] == true
+						end, 4)
+						local p = N.tab("HorsemanQuest").Pieces
+						local got = type(p) == "table" and p[name] == true
+						log("HORSEMAN pickup", name, "in " .. world, "ok=" .. tostring(got))
+						if not got then
+							N.World.pieceFail[name] = os.clock()
+						end
+						N.resumeFishing()
+					else
+						N.World.pieceFail[name] = os.clock()
+						log("HORSEMAN piece not found", name, "in " .. world)
+					end
+					local more = false
+					local now = N.tab("HorsemanQuest").Pieces
+					for other, w in pairs(Q.Placed or {}) do
+						local f = N.World.pieceFail[other]
+						if w == world and other ~= name and not (type(now) == "table" and now[other]) and not (f and os.clock() - f < 600) then
+							more = true
+						end
+					end
+					if more then
+						N.World.horsemanNext = true
+					elseif back ~= world and not (world == N.eventWorld() and N.hollowWanted()) then
+						N.travel(back)
+					end
+					return true
+				end
+			end
+		end
+		return false
+	end
 	-- Probes (Fishing > Probes, all OFF, blatant.md NEW 8): one-shot experiments on hidden server handlers. Each runs once
 	-- per PlaceVersion on this account (the result is remembered in Vader/FISH_probes_<UserId>.txt, a game update runs it
 	-- again), logs `PROBE <name> result=...`, then switches its own toggle off. They never feed the planner: a result only
@@ -6617,6 +7067,8 @@ do
 	Tabs.Rewards = N.addTab("Rewards", "gift", "Daily, playtime, season, achievements, codes and the Big Mouth")
 	Tabs.Items = N.addTab("Items", "backpack", "Chests, potions, relics, enchants and mutations")
 	Tabs.Dungeons = N.addTab("Dungeons", "castle", "Maze, Cave and Volcano")
+	Tabs.Craft = N.addTab("Craft", "hammer", "Workbench keys and potions")
+	Tabs.Event = N.addTab("Event", "ghost", "Haunted Hollow, Spooky Merchant, Headless Horseman")
 	Tabs.Teleport = N.addTab("Teleport", "map", "Islands")
 	Tabs.Stats = N.addTab("Stats", "chart-column", "Session progress and rates")
 	Tabs.Webhook = N.addTab("Webhook", "webhook", "Discord posts")
@@ -6642,6 +7094,12 @@ do
 		{ "AutoMutate", "Mutations" },
 		{ "AutoPets", "Pets" },
 		{ "AutoCargo", "Cargo" },
+		{ "AutoCraftKeys", "Craft keys" },
+		{ "AutoCraftPotions", "Craft potions" },
+		{ "AutoHollow", "Hollow" },
+		{ "HalloweenShop", "Halloween shop" },
+		{ "AutoMerchant", "Spooky Merchant" },
+		{ "AutoHorseman", "Horseman" },
 		{ "AutoMaze", "Maze" },
 		{ "AutoCave", "Cave" },
 		{ "AutoVolcano", "Volcano" },
@@ -6778,7 +7236,7 @@ do
 		local BaitBox = Tabs.Fishing:AddLeftGroupbox("Bait", "worm")
 		BaitBox:AddToggle("AutoBait", { Text = "Auto Bait", Default = false, Tooltip = "Keeps your strongest bait active (one bait = 5 casts)" })
 		BaitBox:AddToggle("BuyBait", { Text = "Buy bait", Default = true, Tooltip = "With Auto Bait: buys the strongest bait in stock whose cost per cast stays under the budget" })
-		local baitNames = listKeys("Content.Item.Bait")
+		local baitNames = listKeys("Content.Item.Bait", function(def) return not N.isEventGear(def.Name) end)
 		local baitDefs = N.sh("Content.Item.Bait")
 		baitDefs = baitDefs and type(baitDefs.Items) == "table" and baitDefs.Items or {}
 		table.sort(baitNames, function(a, b)
@@ -6822,6 +7280,22 @@ do
 		Tabs.Dungeons:AddLeftGroupbox("Ember Volcano", "flame"):AddToggle("AutoVolcano", { Text = "Auto Volcano", Default = false })
 	end
 	do
+		Tabs.Craft:AddLeftGroupbox("Keys", "key"):AddToggle("AutoCraftKeys", { Text = "Auto Craft Keys", Default = false })
+		local PotBox = Tabs.Craft:AddLeftGroupbox("Potions", "flask-conical")
+		PotBox:AddToggle("AutoCraftPotions", { Text = "Auto Craft Potions", Default = false })
+		PotBox:AddDropdown("CraftPotions", { Text = "Potions", Values = { "Luck", "Coins", "XP", "Mutation", "Capacity" }, Default = { "Luck", "Coins", "XP", "Mutation", "Capacity" }, Multi = true, AllowNull = true })
+		PotBox:AddDropdown("CraftPotionType", { Text = "Type", Values = { "Ultra first", "Ultra only", "Normal only" }, Default = "Ultra first" })
+	end
+	do
+		local HollowBox = Tabs.Event:AddLeftGroupbox("Haunted Hollow", "ghost")
+		HollowBox:AddToggle("AutoHollow", { Text = "Auto Hollow", Default = false })
+		HollowBox:AddToggle("HalloweenShop", { Text = "Auto Halloween Shop", Default = false })
+		local MerchBox = Tabs.Event:AddLeftGroupbox("Spooky Merchant", "store")
+		MerchBox:AddToggle("AutoMerchant", { Text = "Auto Spooky Merchant", Default = false })
+		MerchBox:AddDropdown("MerchantPick", { Text = "Items to buy", Values = N.merchantItems(), Default = {}, Multi = true, AllowNull = true, Searchable = true })
+		Tabs.Event:AddLeftGroupbox("Headless Horseman", "skull"):AddToggle("AutoHorseman", { Text = "Auto Horseman Quest", Default = false })
+	end
+	do
 		local RewardBox = Tabs.Rewards:AddLeftGroupbox("Rewards", "gift")
 		RewardBox:AddToggle("AutoRewards", {
 			Text = "Auto Rewards",
@@ -6859,7 +7333,7 @@ do
 	-- allows is bought with its unlock price on the first visit, exactly like the window's price button.
 	do
 		local TpBox = Tabs.Teleport:AddLeftGroupbox("Islands", "map")
-		for _, w in ipairs({ { "Pond", "Pond" }, { "World 1", "Fernshore" }, { "World 2", "Dunehaven" }, { "World 3", "Frostmere" }, { "World 4", "Emberdeep" } }) do
+		for _, w in ipairs({ { "Pond", "Pond" }, { "World 1", "Fernshore" }, { "World 2", "Dunehaven" }, { "World 3", "Frostmere" }, { "World 4", "Emberdeep" }, { "Halloween", "Haunted Hollow" } }) do
 			local key, name = w[1], w[2]
 			local cfg = N.worldCfg(key) or {}
 			local req = tonumber(cfg.RequiredLevel) or 1
@@ -7640,7 +8114,7 @@ do
 		if N.worldStep() then
 			return
 		end
-		if N.pondStep() or N.petStep() or N.dungeonStep() then
+		if N.pondStep() or N.petStep() or N.dungeonStep() or N.horsemanStep() or N.merchantStep() or N.hollowShopStep() then
 			return
 		end
 		if N.bigMouthStep() or N.enchantStep() or N.mutationStep() then
@@ -7669,6 +8143,7 @@ do
 			N.rewardStep()
 			N.codeStep()
 			N.cargoStep()
+			N.craftStep()
 			if N.due("econ", 15) then
 				N.econTick()
 			end
