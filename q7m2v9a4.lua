@@ -297,6 +297,12 @@ local State = {
     EventPass = false,
     EventShopAuto = false,
     EventShopItems = {},
+    EventUpgradesAuto = false,
+    EventUpgradePicks = {},
+
+    -- Rebirth points
+    AutoRebirthStats = false,
+    RebirthStatPicks = {},
 
     -- Discord Webhook
     WebhookURL               = "",
@@ -1614,6 +1620,10 @@ if ((getgenv and getgenv()) or _G).TH == true and VaderUI.GUI then
         ["Auto Pumpkin Pass"] = "รับ Pumpkin Pass อัตโนมัติ", ["Claims unlocked tiers."] = "รับขั้นที่ปลดล็อกแล้ว",
         ["Candy Shop"] = "ร้านขนม", ["Items to buy."] = "ของที่จะซื้อ", ["Auto Buy"] = "ซื้ออัตโนมัติ",
         ["Spends Candy on selected items."] = "ใช้ขนมซื้อของที่เลือก",
+        ["Candy Upgrades"] = "อัปเกรดด้วยขนม", ["Upgrades to buy."] = "อัปเกรดที่จะซื้อ",
+        ["Auto Candy Upgrades"] = "อัปเกรดด้วยขนมอัตโนมัติ", ["Cheapest first."] = "ซื้ออันถูกสุดก่อน",
+        ["Rebirth Stats"] = "แต้มรีเบิร์ธ", ["Stats"] = "สเตตัส", ["Points go to these."] = "ลงแต้มที่สเตตัสเหล่านี้",
+        ["Auto Rebirth Stats"] = "ลงแต้มรีเบิร์ธอัตโนมัติ", ["Spend points evenly."] = "ลงแต้มเท่า ๆ กัน",
     }
     -- Labels built from data keep their variable part.
     local patterns = {
@@ -1719,7 +1729,6 @@ secCollect:AddButton({
         VaderUI:Notify({Title = "Vader Script", Content = "Collected money from all slots.", Duration = 2})
     end
 })
-
 
 local secItems = Tabs.Items:AddSection("Auto Use Items")
 
@@ -2616,6 +2625,41 @@ do
         end)
     end
 
+    -- Candy Upgrades: buy the cheapest picked upgrade that is not maxed.
+    local UpgradeRE = find("HalloweenService", "RE", "BuyUpgrade")
+    local Upgrades = H and req("CandyUpgrades")
+    if UpgradeRE and Upgrades and DataController.CandyUpgrades then
+        local secUp = Tabs.Event:AddSection("Candy Upgrades")
+        local titles, byTitle = {}, {}
+        for _, upgrade in ipairs(Upgrades.List) do
+            table.insert(titles, upgrade.title)
+            byTitle[upgrade.title] = upgrade
+        end
+        secUp:AddDropdown("DropEventUpgrades", {Title="Upgrades", Description="Upgrades to buy.", Values=titles, Multi=true,
+            Default=State.EventUpgradePicks, Callback=function(v) State.EventUpgradePicks = v end})
+        secUp:AddToggle("TogEventUpgrades", {Title="Auto Candy Upgrades", Description="Cheapest first.", Default=false,
+            Callback=function(v) State.EventUpgradesAuto = v end})
+        task.spawn(function()
+            while isCurrentRun() do
+                task.wait(1)
+                if State.EventUpgradesAuto then
+                    pcall(function()
+                        local best, bestCost = nil, math.huge
+                        for title, selected in pairs(State.EventUpgradePicks) do
+                            local upgrade = selected and byTitle[title]
+                            local level = upgrade and (DataController.CandyUpgrades[upgrade.id]() or 0)
+                            if upgrade and level < upgrade.maxLevel then
+                                local cost = Upgrades.GetCost(upgrade, level + 1)
+                                if cost < bestCost then best, bestCost = upgrade, cost end
+                            end
+                        end
+                        if best and amount("Candy") >= bestCost then UpgradeRE:FireServer(best.id) end
+                    end)
+                end
+            end
+        end)
+    end
+
     -- Claims: quests, Pumpkin Pass, and the Candy Shop.
     local sec = H and Tabs.Event:AddSection("Rewards")
     if sec and Ev.QuestRE and Ev.Quests then
@@ -2762,6 +2806,42 @@ secDice:AddButton({
         VaderUI:Notify({Title = "Vader Script", Content = "Purchased affordable dice.", Duration = 2})
     end
 })
+
+-- Rebirth points: each rebirth level gives one point; spread them evenly over the picked stats.
+do
+    local AddStatRE = RebirthService:FindFirstChild("RE") and RebirthService.RE:FindFirstChild("AddStat")
+    local StatsConfig = nil
+    pcall(function() StatsConfig = require(RS.Framework.Features.Rebirth.RebirthStatsConfig) end)
+    if AddStatRE and StatsConfig and DataController.RebirthStats then
+        local names = {}
+        for _, stat in ipairs(StatsConfig.Stats) do table.insert(names, stat.name) end
+        local sec = Tabs.Upgrades:AddSection("Rebirth Stats")
+        sec:AddDropdown("DropRebirthStats", {Title="Stats", Description="Points go to these.", Values=names, Multi=true,
+            Default=State.RebirthStatPicks, Callback=function(v) State.RebirthStatPicks = v end})
+        sec:AddToggle("TogAutoRebirthStats", {Title="Auto Rebirth Stats", Description="Spend points evenly.", Default=false,
+            Callback=function(v) State.AutoRebirthStats = v end})
+        task.spawn(function()
+            while isCurrentRun() do
+                task.wait(1)
+                if State.AutoRebirthStats then
+                    pcall(function()
+                        local spent = DataController.RebirthStats() or {}
+                        local left = StatsConfig.GetRemaining(DataController.Rebirth() or 0, spent)
+                        local pick, lowest = nil, math.huge
+                        for name, selected in pairs(State.RebirthStatPicks) do
+                            if selected and StatsConfig.Get(name) and (spent[name] or 0) < lowest then
+                                pick, lowest = name, spent[name] or 0
+                            end
+                        end
+                        -- One point per tick lets the replicated totals catch up before the next choice.
+                        if left >= 1 and pick then AddStatRE:FireServer(pick) end
+                    end)
+                end
+            end
+        end)
+    end
+end
+
 
 local secWebhook = Tabs.Webhook:AddSection("Discord Webhook Settings")
 
@@ -3077,6 +3157,8 @@ local function loadConfigFile(configName)
         if opt.TogAutoRebirth then opt.TogAutoRebirth:SetValue(State.AutoRebirth) end
         if opt.TogAutoClaim then opt.TogAutoClaim:SetValue(State.AutoClaim) end
         if opt.TogAutoClaimQuests then opt.TogAutoClaimQuests:SetValue(State.AutoClaimQuests) end
+        if opt.DropRebirthStats then opt.DropRebirthStats:SetValue(State.RebirthStatPicks) end
+        if opt.TogAutoRebirthStats then opt.TogAutoRebirthStats:SetValue(State.AutoRebirthStats) end
         if opt.TogAntiAFK then opt.TogAntiAFK:SetValue(State.AntiAFK) end
 
         -- Items Tab
@@ -3186,6 +3268,8 @@ local function loadConfigFile(configName)
         if opt.TogEventPass then opt.TogEventPass:SetValue(State.EventPass) end
         if opt.DropEventShop then opt.DropEventShop:SetValue(State.EventShopItems) end
         if opt.TogEventShop then opt.TogEventShop:SetValue(State.EventShopAuto) end
+        if opt.DropEventUpgrades then opt.DropEventUpgrades:SetValue(State.EventUpgradePicks) end
+        if opt.TogEventUpgrades then opt.TogEventUpgrades:SetValue(State.EventUpgradesAuto) end
 
         -- Upgrades Tab
         if opt.TogAutoUpgrades then opt.TogAutoUpgrades:SetValue(State.AutoUpgrades) end
