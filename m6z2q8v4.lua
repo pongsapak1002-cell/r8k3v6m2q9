@@ -1968,8 +1968,23 @@ local function BuildAutoFarm()
 		end
 	end)
 
-	local BREAK_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial" }
-	local STEAL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial", "Inferno", "Void", "Omega" }
+	-- egg rarities = one per zone, read from the game so a new zone shows up by itself
+	local BREAK_RARITIES = {}
+	pcall(function()
+		for _, zone in ipairs(require(ReplicatedStorage.Shared.ZonesConfig).Zones) do
+			table.insert(BREAK_RARITIES, zone.Rarity)
+		end
+	end)
+	if #BREAK_RARITIES == 0 then
+		BREAK_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial", "Inferno" }
+	end
+	-- shortcut: animal-only rarities above the zone ones, ranked by the game's Blood Moon candy values; a new one needs adding here
+	local STEAL_RARITIES = table.clone(BREAK_RARITIES)
+	for _, r in ipairs({ "Void", "Omega", "Spectral" }) do
+		if not table.find(STEAL_RARITIES, r) then
+			table.insert(STEAL_RARITIES, r)
+		end
+	end
 	local RANK = {}
 	for i, r in ipairs(STEAL_RARITIES) do
 		RANK[r] = i
