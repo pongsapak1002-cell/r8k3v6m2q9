@@ -6594,7 +6594,7 @@ do
 		if not N.eventLive() or not N.eventWorld() then
 			return false
 		end
-		if on("AutoHollow") then
+		if on("AutoHollow") or on("AutoHarpoon") then
 			return true
 		end
 		-- the 3 fished ship pieces only bite in the Hollow
@@ -6991,9 +6991,13 @@ do
 			log("HARPOON upgrade", tostring(nextLevel.Name))
 		end
 		-- the reel minigame: click when the needle sits in the middle half of the zone
+		-- installed once per run on top of the game's own Step (kept in __vaderOrig), so a re-run never leaves a hook
+		-- that belongs to a stopped copy of the script
 		local F = Ctl.Fight
-		if not rawget(F, "__vader") then
-			local orig = F.Step
+		if not N.harpoonHooked then
+			N.harpoonHooked = true
+			local orig = rawget(F, "__vaderOrig") or F.Step
+			rawset(F, "__vaderOrig", orig)
 			rawset(F, "Step", function(self, dt)
 				orig(self, dt)
 				if alive() and on("AutoHarpoon") and self.Active and os.clock() >= self.WaitUntil then
@@ -7002,16 +7006,29 @@ do
 					end
 				end
 			end)
-			rawset(F, "__vader", true)
 		end
 		if not Ctl.Dive.Active then
+			-- the game ignores a dive request while the last one is still surfacing: wait for that, then ask (and ask
+			-- again every second until the dive is pending)
+			waitFor(function()
+				return not Ctl.Dive.Surfacing and not Ctl.Dive.Pending and not Ctl.Dive.Active
+			end, 8)
 			N.goTo(HC.Dock, 6)
-			asGame(function()
-				Ctl:RequestDive()
-			end)
-			if not waitFor(function()
+			local started = false
+			for _ = 1, 6 do
+				asGame(function()
+					Ctl:RequestDive()
+				end)
+				if waitFor(function()
+					return Ctl.Dive.Pending == true or Ctl.Dive.Active == true
+				end, 1) then
+					started = true
+					break
+				end
+			end
+			if not started or not waitFor(function()
 				return Ctl.Dive.Arrived == true
-			end, 12) then
+			end, 10) then
 				log("HARPOON dive did not start")
 				N.resumeFishing()
 				return false
@@ -7058,7 +7075,7 @@ do
 			end
 		end
 		waitFor(function()
-			return not Ctl.Dive.Active
+			return not Ctl.Dive.Active and not Ctl.Dive.Surfacing
 		end, 10)
 		log("HARPOON dive", "shots=" .. shots, "catches=" .. tostring(N.tab("Harpoon").Catches), string.format("%.0fs", os.clock() - started))
 		N.resumeFishing()
