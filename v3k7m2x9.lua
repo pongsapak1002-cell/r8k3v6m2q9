@@ -1914,6 +1914,7 @@ local function Vader_MakeLibrary()
         BaitPick = "Empty = any bait in the budget",
         CraftPotionType = "Ultra = 25 shards, x2 effect",
         AutoHollow = "Needs Auto Fish",
+        AutoTrail = "World 3, 25% of the rod price per roll",
         MerchantPick = "Empty = buys nothing",
         AutoMaze = "Chrono Rod (2.5T)",
         AutoCave = "Frostbite Rod (15T)",
@@ -2741,6 +2742,10 @@ do
 		Craft = true,
 		HorsemanQuest = true,
 		Merchant = true,
+		HollowRewards = true,
+		StarMerge = true,
+		Trail = true,
+		Harpoon = true,
 	}
 	local Functions = { Sell = true, SellAll = true }
 	-- The fishing loop logs its own CAST/HOOK lines, these stay out of the SEND lines.
@@ -2761,6 +2766,10 @@ do
 		Craft = { Craft = true, Collect = true },
 		HorsemanQuest = { Accept = true, Pickup = true, Give = true },
 		Merchant = { Open = true, Buy = true },
+		HollowRewards = { Claim = true },
+		StarMerge = { Add = true, Reset = true },
+		Trail = { Roll = true },
+		Harpoon = { Upgrade = true },
 	}
 	N.Sent = { count = 0, byName = {}, window = {}, recent = {} }
 	function N.remoteExists(name)
@@ -4411,6 +4420,19 @@ do
 		end
 		local d = N.data()
 		local now = N.serverTime()
+		-- Hollow Rewards (Update 12): 12 tiers by the CandyCorn ever earned, Claim(tier) from anywhere
+		local HR = cfg("HollowRewardsConfig")
+		if HR and type(HR.Tiers) == "table" and N.due("hollowRewards", 60) then
+			for i in ipairs(HR.Tiers) do
+				local okR, reached = pcall(HR.IsReached, d, i)
+				local okC, done = pcall(HR.IsClaimed, d, i)
+				if okR and reached and okC and not done then
+					send("HollowRewards", "Claim", i)
+					claimed("Hollow reward " .. i)
+					task.wait(0.5)
+				end
+			end
+		end
 		-- Daily login ladder (DailyRewardsConfig.CanClaim, claims every unlocked day).
 		local dr = d.DailyRewards
 		if type(dr) ~= "table" then
@@ -5648,6 +5670,10 @@ do
 	end
 	-- Smart Planner (and the plain buy toggles): one purchase per call.
 	function N.spendStep()
+		-- the event world prices everything in its own currency: the Halloween Shop buys there, not this
+		if N.inHollow() then
+			return false
+		end
 		local list = N.candidates()
 		P.list = list
 		-- A purchase must pay back before the current 24 h window ends (with a 10% margin), so late buys never cost
@@ -5795,6 +5821,14 @@ do
 	function N.worldStep()
 		-- Haunted Hollow (Auto Hollow, or the Horseman's fished pieces) first, then a missing dungeon fish
 		local hunt = (N.hollowWanted and N.hollowWanted() and N.eventWorld()) or (N.dungeonWorld and N.dungeonWorld())
+		-- left in the event world without a reason to be there (an old trip, a rejoin): back to normal fishing
+		if not hunt and N.inHollow() and N.World.manual ~= N.worldKey() then
+			local ok = N.travel(N.bestFishingWorld())
+			if ok then
+				N.equipBestRod()
+			end
+			return ok
+		end
 		if not (on("AutoWorlds") or N.planner() or hunt) then
 			return false
 		end
@@ -5900,7 +5934,7 @@ do
 		local reason
 		if fill >= optionNumber("SellAt", 80) / 100 then
 			reason = string.format("backpack %d%%", math.floor(fill * 100))
-		elseif boost > 1 and sellable >= 5 then
+		elseif boost > 1 and sellable >= 5 and not N.inHollow() then
 			reason = "CashBoost x" .. boost
 		elseif N.planner() and P.need and N.cash() < P.need.price and N.cash() + value * 0.95 >= P.need.price then
 			reason = "fund " .. P.need.name
@@ -6525,6 +6559,16 @@ do
 				if not inserted and stackOf("Key", r.Output.Name) == 0 and stackOf(input.Type, input.Item) >= input.Amount then
 					craft(r, 1)
 				end
+			elseif r.Category == "Potions" and on("AutoCraftPotions") and #(r.Inputs or {}) > 1 then
+				-- mixed-shard recipes (Restore Streak Potion): picked by name, as many as every input allows
+				local label = string.gsub(tostring(r.Output.Name), " Potion$", "")
+				if selected(Options.CraftPotions, label) then
+					local n = tonumber(CC.MaxBatch) or 25
+					for _, inp in ipairs(r.Inputs) do
+						n = math.min(n, if inp.Item then math.floor(stackOf(inp.Type, inp.Item) / inp.Amount) else 0)
+					end
+					craft(r, n)
+				end
 			elseif r.Category == "Potions" and on("AutoCraftPotions") and input and input.Item then
 				local kind = string.match(input.Item, "^(%a+) Shard$")
 				local ultra = string.find(r.Id, "^Ultra") ~= nil
@@ -6772,6 +6816,254 @@ do
 	-- Headless Horseman Quest: Accept, then Pickup(piece) within 30 studs of each placed piece (World 1, World 2,
 	-- Hollow; the client shows the current world's pieces in Workspace.HorsemanPiecesLocal), the 3 fished pieces come
 	-- from casts in the Hollow (guaranteed by 60), Give hands everything in (no distance check). 10 = the Hollow Grin.
+	--------------------------------------------------------------------------------------------------------------
+	-- Star Upgrader (Update 12, in the own pond): Add Left/Right two pets with the same name, shiny and stars, the
+	-- server merges them into one with +1 star (max 3, combined XP).
+	function N.starMergeStep()
+		if not on("AutoStarMerge") or not N.due("starMerge", 60) then
+			return false
+		end
+		local P = N.sh("Config.PetConfig")
+		local PetItem = N.sh("Content.Item.Pet")
+		if type(P) ~= "table" or type(P.StarsOf) ~= "function" then
+			return false
+		end
+		local max = tonumber(P.Stars and P.Stars.Max) or 3
+		local function pairsNow()
+			local groups = {}
+			for guid, item in pairs(N.inv()) do
+				if type(item) == "table" and item.Type == "Pet" then
+					local okS, stars = pcall(P.StarsOf, item)
+					local okH, shiny = pcall(function()
+						return PetItem:IsShiny(item)
+					end)
+					stars = if okS then tonumber(stars) or 0 else 0
+					if stars < max then
+						local key = item.Name .. "|" .. tostring(okH and shiny) .. "|" .. stars
+						groups[key] = groups[key] or {}
+						table.insert(groups[key], guid)
+					end
+				end
+			end
+			local out = {}
+			for _, list in pairs(groups) do
+				table.sort(list)
+				for i = 1, #list - 1, 2 do
+					table.insert(out, { list[i], list[i + 1] })
+				end
+			end
+			return out
+		end
+		if #pairsNow() == 0 or not N.unlocked("Pond") then
+			return false
+		end
+		local back = N.worldKey()
+		if not N.travel("Pond") then
+			return false
+		end
+		local merged = 0
+		for _ = 1, 20 do
+			local pair = pairsNow()[1]
+			if not pair then
+				break
+			end
+			local before = N.inv()[pair[1]] and N.inv()[pair[1]].Name
+			send("StarMerge", "Reset")
+			task.wait(0.3)
+			send("StarMerge", "Add", "Left", pair[1])
+			task.wait(0.3)
+			send("StarMerge", "Add", "Right", pair[2])
+			if not waitFor(function()
+				return N.inv()[pair[1]] == nil and N.inv()[pair[2]] == nil
+			end, 4) then
+				log("PET merge failed", tostring(before))
+				break
+			end
+			log("PET merge", tostring(before))
+			merged += 1
+		end
+		if back ~= "Pond" then
+			N.travel(back)
+		end
+		return merged > 0
+	end
+	--------------------------------------------------------------------------------------------------------------
+	-- Rod Trails (Update 12, the ring in Frostmere's cave: World 3 Map.TrailSpin): Roll costs cash (25% of the rod
+	-- price) and replaces the rod's trail. Rolls until the trail reaches the picked rarity, never below 4x the price.
+	local TrailRank = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Mythic = 6, Secret = 7, Exotic = 8 }
+	function N.trailStep()
+		if not on("AutoTrail") or not N.due("trail", 30) then
+			return false
+		end
+		local T = N.sh("Modules.Items.Trail")
+		local TC = N.sh("Config.TrailConfig")
+		if type(T) ~= "table" or type(TC) ~= "table" or not N.unlocked("World 3") or N.inHollow() then
+			return false
+		end
+		local rod = N.data().RodEquipped
+		local function current()
+			local ok, name = pcall(T.Get, N.data(), rod)
+			local def = ok and name and TC.Get(name)
+			return name, def and TrailRank[def.Rarity] or 0
+		end
+		local okP, price = pcall(T.PriceFor, rod)
+		price = okP and tonumber(price) or nil
+		local target = TrailRank[optionText("TrailStop", "Legendary")] or 5
+		local _, rank = current()
+		if not price or rank >= target or N.cash() < price * 4 then
+			return false
+		end
+		local back = N.worldKey()
+		if not N.travel("World 3") then
+			return false
+		end
+		local w = workspace:FindFirstChild("World")
+		local folder = w and w:FindFirstChild("World 3")
+		local ring = folder and folder:FindFirstChild("TrailSpin", true)
+		local okR, cf = pcall(function()
+			return ring:GetPivot()
+		end)
+		if okR and cf then
+			N.pauseFishing("trail roll")
+			N.goTo(cf.Position, 6)
+			for _ = 1, 10 do
+				local name, r = current()
+				if r >= target or N.cash() < price * 4 then
+					break
+				end
+				local before = N.cash()
+				send("Trail", "Roll")
+				-- the ring spins before the result lands
+				waitFor(function()
+					return N.cash() < before
+				end, 4)
+				task.wait(3)
+				local after, ra = current()
+				log("TRAIL roll", tostring(rod), tostring(name) .. " -> " .. tostring(after), "rank=" .. ra, "price=" .. formatNumber(price))
+			end
+			N.resumeFishing()
+		else
+			log("TRAIL ring not found in World 3")
+		end
+		if back ~= "World 3" then
+			N.travel(back)
+		end
+		return true
+	end
+	--------------------------------------------------------------------------------------------------------------
+	-- Harpoon Dive (Update 12, Hollow dock): drives the game's own harpoon controller, like a player would: RequestDive,
+	-- aim the camera at the rarest fish this harpoon level can catch and Gun:Trigger it (the game's aim assist
+	-- finishes the aim), the reel minigame is clicked when the needle is mid-zone, RequestLeave once the bag is full.
+	function N.harpoonStep()
+		if not on("AutoHarpoon") or not N.eventLive() or not N.eventWorld() then
+			return false
+		end
+		local HC = N.sh("Config.HarpoonConfig")
+		local okC, Ctl = pcall(function()
+			return require(LocalPlayer.PlayerScripts.Client.Controllers.Harpoon)
+		end)
+		if type(HC) ~= "table" or not okC or type(Ctl) ~= "table" or not (Ctl.Dive and Ctl.Gun and Ctl.Fight and Ctl.School) then
+			return false
+		end
+		local setId = setthreadidentity or set_thread_identity or setidentity
+		local function asGame(fn)
+			if setId then
+				pcall(setId, 2)
+			end
+			local ok, err = pcall(fn)
+			if setId then
+				pcall(setId, 8)
+			end
+			return ok, err
+		end
+		if not N.travel(N.eventWorld()) then
+			return false
+		end
+		N.pauseFishing("harpoon dive")
+		-- a new harpoon once the catches allow it
+		local hd = N.tab("Harpoon")
+		local level = tonumber(hd.Level) or 1
+		local nextLevel = HC.Levels and HC.Levels[level + 1]
+		if nextLevel and (tonumber(hd.Catches) or 0) >= (tonumber(nextLevel.Catches) or math.huge) then
+			N.goTo(HC.Dock, 6)
+			send("Harpoon", "Upgrade")
+			task.wait(1.5)
+			log("HARPOON upgrade", tostring(nextLevel.Name))
+		end
+		-- the reel minigame: click when the needle sits in the middle half of the zone
+		local F = Ctl.Fight
+		if not rawget(F, "__vader") then
+			local orig = F.Step
+			rawset(F, "Step", function(self, dt)
+				orig(self, dt)
+				if alive() and on("AutoHarpoon") and self.Active and os.clock() >= self.WaitUntil then
+					if math.abs(self.Angle - (self.Start + self.Size / 2)) <= self.Size * 0.25 then
+						self:Click()
+					end
+				end
+			end)
+			rawset(F, "__vader", true)
+		end
+		if not Ctl.Dive.Active then
+			N.goTo(HC.Dock, 6)
+			asGame(function()
+				Ctl:RequestDive()
+			end)
+			if not waitFor(function()
+				return Ctl.Dive.Arrived == true
+			end, 12) then
+				log("HARPOON dive did not start")
+				N.resumeFishing()
+				return false
+			end
+		end
+		setStatus("Harpoon dive")
+		local rank = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Mythic = 6, Secret = 7, Exotic = 8 }
+		local shots, started = 0, os.clock()
+		while alive() and on("AutoHarpoon") and Ctl.Dive.Active and os.clock() - started < 180 do
+			if Ctl.Fight.Active then
+				task.wait(0.1)
+			elseif Ctl.Dive.Bag >= Ctl.Dive.BagSize then
+				asGame(function()
+					Ctl:RequestLeave()
+				end)
+				break
+			else
+				local cam = workspace.CurrentCamera
+				local origin = cam.CFrame.Position
+				local lvl = tonumber(Ctl.Dive.Level) or 1
+				local spec = HC.Level(lvl)
+				local best, bestR, bestD
+				for _, f in pairs(Ctl.School.Fish) do
+					local name = f.Spec and f.Spec.Fish
+					if not f.Held and f.Root and f.Root.Parent and name and HC.CanCatch(lvl, name) then
+						local d = (f.Root.Position - origin).Magnitude
+						local r = rank[f.Info and f.Info.Rarity] or 0
+						if d <= spec.Range and (not best or r > bestR or (r == bestR and d < bestD)) then
+							best, bestR, bestD = f, r, d
+						end
+					end
+				end
+				if best then
+					cam.CFrame = CFrame.lookAt(origin, best.Root.Position)
+					local p = cam:WorldToViewportPoint(best.Root.Position)
+					asGame(function()
+						Ctl.Gun:Trigger(Vector2.new(p.X, p.Y))
+					end)
+					shots += 1
+					task.wait(spec.Reload + 0.1)
+				else
+					task.wait(0.2)
+				end
+			end
+		end
+		waitFor(function()
+			return not Ctl.Dive.Active
+		end, 10)
+		log("HARPOON dive", "shots=" .. shots, "catches=" .. tostring(N.tab("Harpoon").Catches), string.format("%.0fs", os.clock() - started))
+		N.resumeFishing()
+		return true
+	end
 	function N.horsemanStep()
 		if not on("AutoHorseman") then
 			return false
@@ -7094,6 +7386,9 @@ do
 		{ "AutoMutate", "Mutations" },
 		{ "AutoPets", "Pets" },
 		{ "AutoCargo", "Cargo" },
+		{ "AutoStarMerge", "Star merge" },
+		{ "AutoHarpoon", "Harpoon" },
+		{ "AutoTrail", "Trail" },
 		{ "AutoCraftKeys", "Craft keys" },
 		{ "AutoCraftPotions", "Craft potions" },
 		{ "AutoHollow", "Hollow" },
@@ -7270,6 +7565,8 @@ do
 		local RodBox = Tabs.Upgrades:AddRightGroupbox("Rods", "anchor")
 		RodBox:AddToggle("AutoRods", { Text = "Auto Buy Rods", Default = false, Tooltip = "Buys the strongest rod you can afford and equips your best rod. Smart Planner buys by payback instead" })
 		Labels.Rods = { SetText = function() end }
+		RodBox:AddToggle("AutoTrail", { Text = "Auto Trail", Default = false })
+		RodBox:AddDropdown("TrailStop", { Text = "Stop at", Values = { "Rare", "Epic", "Legendary", "Mythic", "Secret", "Exotic" }, Default = "Legendary" })
 		local WorldBox = Tabs.Upgrades:AddRightGroupbox("Worlds", "globe")
 		WorldBox:AddToggle("AutoWorlds", { Text = "Auto Worlds", Default = false, Tooltip = "Unlocks the next world once your level and cash allow (World 2: level 15, 30M; World 3: 40, 7.5B; World 4: 65, 400B) and fishes in the best one" })
 		Labels.World = { SetText = function() end }
@@ -7283,7 +7580,7 @@ do
 		Tabs.Craft:AddLeftGroupbox("Keys", "key"):AddToggle("AutoCraftKeys", { Text = "Auto Craft Keys", Default = false })
 		local PotBox = Tabs.Craft:AddLeftGroupbox("Potions", "flask-conical")
 		PotBox:AddToggle("AutoCraftPotions", { Text = "Auto Craft Potions", Default = false })
-		PotBox:AddDropdown("CraftPotions", { Text = "Potions", Values = { "Luck", "Coins", "XP", "Mutation", "Capacity" }, Default = { "Luck", "Coins", "XP", "Mutation", "Capacity" }, Multi = true, AllowNull = true })
+		PotBox:AddDropdown("CraftPotions", { Text = "Potions", Values = { "Luck", "Coins", "XP", "Mutation", "Capacity", "Restore Streak" }, Default = { "Luck", "Coins", "XP", "Mutation", "Capacity" }, Multi = true, AllowNull = true })
 		PotBox:AddDropdown("CraftPotionType", { Text = "Type", Values = { "Ultra first", "Ultra only", "Normal only" }, Default = "Ultra first" })
 	end
 	do
@@ -7294,6 +7591,7 @@ do
 		MerchBox:AddToggle("AutoMerchant", { Text = "Auto Spooky Merchant", Default = false })
 		MerchBox:AddDropdown("MerchantPick", { Text = "Items to buy", Values = N.merchantItems(), Default = {}, Multi = true, AllowNull = true, Searchable = true })
 		Tabs.Event:AddLeftGroupbox("Headless Horseman", "skull"):AddToggle("AutoHorseman", { Text = "Auto Horseman Quest", Default = false })
+		Tabs.Event:AddLeftGroupbox("Harpoon Dive", "anchor"):AddToggle("AutoHarpoon", { Text = "Auto Harpoon", Default = false })
 	end
 	do
 		local RewardBox = Tabs.Rewards:AddLeftGroupbox("Rewards", "gift")
@@ -7325,6 +7623,7 @@ do
 		MutateBox:AddToggle("AutoMutate", { Text = "Auto Mutate", Default = false, Tooltip = "Spends Mutation Scrolls at the Mutation Dealer on your most valuable fish without a mutation (x2 to x15 sell value)" })
 		local PetBox = Tabs.Items:AddRightGroupbox("Pets", "paw-print")
 		PetBox:AddToggle("AutoPets", { Text = "Auto Pets", Default = false })
+		PetBox:AddToggle("AutoStarMerge", { Text = "Auto Star Merge", Default = false })
 		local CargoBox = Tabs.Items:AddLeftGroupbox("Cargo", "ship")
 		CargoBox:AddToggle("AutoCargo", { Text = "Auto Cargo", Default = false })
 		Labels.Items = { SetText = function() end }
@@ -8114,7 +8413,7 @@ do
 		if N.worldStep() then
 			return
 		end
-		if N.pondStep() or N.petStep() or N.dungeonStep() or N.horsemanStep() or N.merchantStep() or N.hollowShopStep() then
+		if N.pondStep() or N.petStep() or N.starMergeStep() or N.dungeonStep() or N.horsemanStep() or N.harpoonStep() or N.merchantStep() or N.hollowShopStep() or N.trailStep() then
 			return
 		end
 		if N.bigMouthStep() or N.enchantStep() or N.mutationStep() then
