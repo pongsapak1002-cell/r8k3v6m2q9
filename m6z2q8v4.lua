@@ -4574,6 +4574,31 @@ local function loadProfile()
     return ok, problem
 end
 
+-- Noclip: walk through everything; parts that were solid become solid again when switched off
+local noclip, noclipSaved = false, {}
+Tabs.Settings:AddSection("Player"):AddToggle("Noclip", {
+    Title = "Noclip", Default = false,
+    Callback = function(value)
+        noclip = value
+        if not value then
+            for part in pairs(noclipSaved) do
+                if part.Parent then part.CanCollide = true end
+            end
+            table.clear(noclipSaved)
+        end
+    end,
+})
+track(RunService.Stepped:Connect(function()
+    local character = noclip and LocalPlayer.Character
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.CanCollide then
+            noclipSaved[part] = true
+            part.CanCollide = false
+        end
+    end
+end))
+
 local AFK = Tabs.Settings:AddSection("Anti-AFK")
 AFK:AddToggle("AntiAFK", {
     Title = "Anti-AFK", Default = true,
