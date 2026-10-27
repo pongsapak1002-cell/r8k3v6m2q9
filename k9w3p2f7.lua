@@ -1819,11 +1819,29 @@ local SpeedUpgradeConfig = require(Configs.SpeedUpgradeConfig)
 local BloodConfig = require(Configs.BloodTransfusionConfig)
 local GameConfig = require(Configs.GameConfig)
 
-local RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical", "Divine", "Secret", "Cosmic", "Halloween" }
+-- built from the game's configs so new zones and rarities appear after a game update
 local ZONES = {}
-for _, rarity in ipairs(RARITIES) do
-    if AreaConfig[rarity .. "Area"] then table.insert(ZONES, rarity .. "Area") end
+for id in pairs(AreaConfig) do table.insert(ZONES, id) end
+table.sort(ZONES, function(a, b) return (AreaConfig[a].Step or 0) < (AreaConfig[b].Step or 0) end)
+
+local topPrice = {}
+for _, conf in pairs(MosquitoConfig) do
+    if conf.Rarity then topPrice[conf.Rarity] = math.max(topPrice[conf.Rarity] or 0, tonumber(conf.Price) or 0) end
 end
+local RARITIES = {}
+for rarity in pairs(topPrice) do table.insert(RARITIES, rarity) end
+-- zone rarities in zone order, then event-only rarities by their best mosquito's price
+local function zoneStep(rarity)
+    local area = AreaConfig[rarity .. "Area"]
+    return area and area.Step
+end
+table.sort(RARITIES, function(a, b)
+    local sa, sb = zoneStep(a), zoneStep(b)
+    if sa and sb then return sa < sb end
+    if sa or sb then return sa ~= nil end
+    if topPrice[a] ~= topPrice[b] then return topPrice[a] < topPrice[b] end
+    return a < b
+end)
 local MY_ACTOR = "Player_" .. LocalPlayer.UserId
 
 local allRarities = {}
