@@ -1840,6 +1840,7 @@ local Dungeons = require(Shared:WaitForChild("Dungeons"))
 local Raids = require(Shared:WaitForChild("Raids"))
 local Events = require(Shared:WaitForChild("Events"))
 local Roles = require(Shared:WaitForChild("Roles"))
+local Deck = require(Shared:WaitForChild("Deck"))
 
 local function profile()
     local ok, data = pcall(Store.profile)
@@ -2000,7 +2001,7 @@ PackSection:AddToggle("AutoPack", {
 })
 PackSection:AddDropdown("InstantMoons", {
     Title = "Open Instant At Moon", Values = MoonNames, Default = {}, Multi = true,
-    Description = "Picked moon or stronger.",
+    Description = "This moon or stronger.",
     Callback = function(value) State.InstantMoons = value end,
 })
 PackSection:AddToggle("AutoInstant", {
@@ -2021,7 +2022,7 @@ Allocation:AddToggle("AutoAllocate", {
     Callback = function(value) State.AutoAllocate = value end,
 })
 Allocation:AddButton({
-    Title = "Reset Stats", Description = "Uses 1 stat reset.",
+    Title = "Reset Stats", Description = "Refunds points. Costs 1 reset.",
     Callback = function()
         Window:Dialog({
             Title = "Reset Stats",
@@ -2047,7 +2048,7 @@ PotionSection:AddToggle("AutoPotions", {
 local MoonSection = Tabs.Items:AddSection("Moon")
 MoonSection:AddDropdown("MoonTargets", {
     Title = "Moon", Values = MoonNames, Default = {}, Multi = true,
-    Description = "Picked moon or stronger.",
+    Description = "Rerolls until this moon or stronger.",
     Callback = function(value) State.MoonTargets = value end,
 })
 MoonSection:AddDropdown("MoonCount", {
@@ -2146,12 +2147,12 @@ PetCare:AddToggle("AutoGrowPet", {
 
 local Away = Tabs.Modes:AddSection("Expeditions")
 Away:AddToggle("AutoExpedition", {
-    Title = "Auto Expedition", Description = "Resends the same team.", Default = false,
+    Title = "Auto Expedition", Description = "Claims and resends same team.", Default = false,
     Callback = function(value) State.AutoExpedition = value end,
 })
 local Fights = Tabs.Modes:AddSection("Arena")
 Fights:AddToggle("AutoArena", {
-    Title = "Auto Arena", Default = false,
+    Title = "Auto Arena", Description = "Fights anyone weaker than you.", Default = false,
     Callback = function(value) State.AutoArena = value end,
 })
 local Delve = Tabs.Modes:AddSection("Dungeon")
@@ -2375,22 +2376,25 @@ every(function() return 10 end, function()
     end
 end)
 
-every(function() return 5 end, function()
+every(function() return 2 end, function()
     local data = profile()
-    if State.AutoArena and (data.arenaRuns or 0) > 0 and not busy("arena") and not Store.arenaFighting() and not locked() then
-        local offers = Store.arenaOffers()
-        -- shortcut: offer list shape seen only through the UI (u1.index); fights the first one
-        local list = type(offers) == "table" and (offers.offers or offers.list or offers) or nil
-        local first = list and list[1]
-        if type(first) == "table" and first.index then
-            Actions.arenaFight(first.index)
-        else
-            Actions.arenaFind()
+    if not State.AutoArena or (data.arenaRuns or 0) <= 0 or busy("arena") or Store.arenaFighting() or locked() then return end
+    local offers = Store.arenaOffers()
+    local list = type(offers) == "table" and offers.list or nil
+    if list and #list > 0 then
+        -- fight anyone weaker than our deck; a fight clears the list, so the next loop refreshes for more
+        local mine = Deck.power(data.deck, data.cards)
+        for slot, offer in ipairs(list) do
+            if (offer.power or math.huge) < mine then
+                Actions.arenaFight(slot)
+                return
+            end
         end
     end
+    -- no offers yet, or nobody weaker: same as the REFRESH button
+    Actions.arenaFind()
 end)
 
--- shortcut: Store.dungeon() is a list even when idle, so a slow timer stands in for "not in a run"
 -- tickets left, read from the counter the dungeon screen uses; Dungeons.tickets treats a negative count as full
 local function dungeonRuns(data, dungeon)
     local runs
