@@ -1841,6 +1841,7 @@ local Raids = require(Shared:WaitForChild("Raids"))
 local Events = require(Shared:WaitForChild("Events"))
 local Roles = require(Shared:WaitForChild("Roles"))
 local Deck = require(Shared:WaitForChild("Deck"))
+local Cards = require(Shared:WaitForChild("Cards"))
 
 local function profile()
     local ok, data = pcall(Store.profile)
@@ -2066,12 +2067,12 @@ GearSection:AddToggle("AutoGear", {
     Callback = function(value) State.AutoGear = value end,
 })
 
-local Cards = Tabs.Progress:AddSection("Cards")
-Cards:AddToggle("AutoLevel", {
+local CardSection = Tabs.Progress:AddSection("Cards")
+CardSection:AddToggle("AutoLevel", {
     Title = "Auto Level All", Default = false,
     Callback = function(value) State.AutoLevel = value end,
 })
-Cards:AddToggle("AutoEquipCards", {
+CardSection:AddToggle("AutoEquipCards", {
     Title = "Auto Equip Best Cards", Default = false,
     Callback = function(value) State.AutoEquipCards = value end,
 })
@@ -2147,7 +2148,7 @@ PetCare:AddToggle("AutoGrowPet", {
 
 local Away = Tabs.Modes:AddSection("Expeditions")
 Away:AddToggle("AutoExpedition", {
-    Title = "Auto Expedition", Description = "Claims and resends same team.", Default = false,
+    Title = "Auto Expedition", Description = "Claims and sends the best cards.", Default = false,
     Callback = function(value) State.AutoExpedition = value end,
 })
 local Fights = Tabs.Modes:AddSection("Arena")
@@ -2362,16 +2363,58 @@ every(function() return 3 end, function()
     end
 end)
 
-every(function() return 10 end, function()
+-- same filter as the expedition screen's card list: owned, not in the deck, not field-locked, eligible, not already sent
+local function bestTeam(expedition, data, taken)
+    local pool = {}
+    local deck = data.deck or {}
+    for id, entry in pairs(data.cards or {}) do
+        for version = 0, #Cards.VERSIONS - 1 do
+            local key = Cards.key(id, version)
+            if Cards.count(entry, version) > 0 and not taken[key] and not table.find(deck, key)
+                and not Deck.fieldLock(key, data.frontier, data.fieldFree) and Expeditions.eligible(expedition, key) then
+                local oneIn = Expeditions.rarity(key)
+                table.insert(pool, { key = key, oneIn = oneIn, mult = Expeditions.multiplier(expedition, oneIn) })
+            end
+        end
+    end
+    -- biggest payout first; the multiplier caps, so on a tie keep the rarer card for a harder trip
+    table.sort(pool, function(a, b)
+        if a.mult ~= b.mult then return a.mult > b.mult end
+        return a.oneIn < b.oneIn
+    end)
+    local team = {}
+    for slot = 1, math.min(Expeditions.SLOTS or 3, #pool) do
+        team[slot] = pool[slot].key
+    end
+    return team
+end
+
+every(function() return 5 end, function()
     if not State.AutoExpedition or busy("expedition") then return end
-    for id, run in pairs(profile().expeditions or {}) do
+    local data = profile()
+    local running = data.expeditions or {}
+    -- left is a snapshot from syncedAt (os.clock), the same way the screen counts down
+    local elapsed = math.max(0, os.clock() - (data.syncedAt or os.clock()))
+    for id, run in pairs(running) do
         local expedition = ExpeditionById[id]
-        if expedition and type(run) == "table" and (run.left or 1) <= 0 then
-            local team = table.clone(run.cards or {})
+        if expedition and type(run) == "table" and (run.left or 1) - elapsed <= 0 then
             Actions.expeditionClaim(expedition.code, false)
-            task.wait(2)
-            if next(team) then Actions.expeditionStart(expedition.code, team) end
             return
+        end
+    end
+    local taken = {}
+    for _, run in pairs(running) do
+        for _, key in ipairs(type(run) == "table" and run.cards or {}) do taken[key] = true end
+    end
+    -- hardest trip first so the rarest cards go where only they qualify
+    for index = #Expeditions.LIST, 1, -1 do
+        local expedition = Expeditions.LIST[index]
+        if running[expedition.id] == nil then
+            local team = bestTeam(expedition, data, taken)
+            if #team > 0 then
+                Actions.expeditionStart(expedition.code, team)
+                return
+            end
         end
     end
 end)
