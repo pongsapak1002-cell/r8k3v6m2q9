@@ -2176,7 +2176,7 @@ RaidSection:AddToggle("AutoRaid", {
 })
 
 local Halloween = Tabs.Event:AddSection("Halloween")
-Halloween:AddToggle("AutoKnock", {
+local AutoKnockToggle = Halloween:AddToggle("AutoKnock", {
     Title = "Auto Trick or Treat", Default = false,
     Callback = function(value) State.AutoKnock = value end,
 })
@@ -2462,19 +2462,40 @@ every(function() return 2 end, function()
     end
 end)
 
-every(function() return 5 end, function()
+-- castles knocked this session, so we don't wait on the profile sync before moving to the next one
+local KnockedHere = {}
+local KnockText
+every(function() return 0.3 end, function()
     local data = profile()
-    if State.AutoKnock and data.eventPhase == "live" and not busy("knock") then
-        local knocked = data.eventKnocked or {}
-        if (data.eventKnocks or 0) < (Events.KNOCKS or math.huge) then
-            for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-                if player ~= LocalPlayer and not table.find(knocked, player.UserId) and not knocked[player.UserId] then
-                    Actions.trickOrTreat(player.UserId)
-                    break
-                end
-            end
+    -- eventKnocked lists the userIds knocked today; one knock per castle per day
+    local knocked = data.eventKnocked or {}
+    local limit = Events.KNOCKS or 10
+    local text = ("Limit %d/%d"):format(#knocked, limit)
+    if text ~= KnockText then
+        KnockText = text
+        AutoKnockToggle:SetDesc(text)
+    end
+    if not State.AutoKnock or data.eventPhase ~= "live" or #knocked >= limit then return end
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        local id = player.UserId
+        if player ~= LocalPlayer and not table.find(knocked, id) and not KnockedHere[id] then
+            KnockedHere[id] = true
+            -- the server ignores a knock until the castle was viewed, like the in-game button flow
+            Actions.viewProfile(id)
+            local started = os.clock()
+            repeat
+                task.wait()
+                local seen = Store.inspect()
+            until (type(seen) == "table" and seen.userId == id) or os.clock() - started > 3
+            pcall(Store.closeModal)
+            Actions.trickOrTreat(id)
+            return
         end
     end
+end)
+
+every(function() return 5 end, function()
+    local data = profile()
     if State.AutoEventClaim and not busy("event") then
         Actions.eventClaim(1)
         if data.eventPremium then Actions.eventClaim(2) end
