@@ -1778,10 +1778,10 @@ local State = {
     AutoLevel = false, AutoEquipCards = false,
     ClaimInterval = 30, AutoDaily = false, AutoPlaytime = false, AutoQuests = false,
     AutoPass = false, AutoMail = false, AutoTreasury = false, Code = "",
-    Egg = nil, AutoHatch = false, AutoBestPets = false, AutoGrowPet = false,
+    Egg = nil, AutoHatch = false, AutoBestPets = false, AutoGrowPet = false, AutoFuse = false,
     AutoExpedition = false, AutoArena = false, Dungeons = {}, AutoDungeon = false,
     Raids = {}, AutoRaid = false,
-    AutoKnock = false, AutoEventClaim = false, AutoEventMode = false,
+    AutoExplore = false, AutoAttack = false, AutoStation = false,
 }
 local Connections = {}
 local closed = false
@@ -1838,7 +1838,8 @@ local Modes = require(Shared:WaitForChild("Modes"))
 local Expeditions = require(Shared:WaitForChild("Expeditions"))
 local Dungeons = require(Shared:WaitForChild("Dungeons"))
 local Raids = require(Shared:WaitForChild("Raids"))
-local Events = require(Shared:WaitForChild("Events"))
+local Explore = require(Shared:WaitForChild("Explore"))
+local Territory = require(Shared:WaitForChild("Territory"))
 local Roles = require(Shared:WaitForChild("Roles"))
 local Deck = require(Shared:WaitForChild("Deck"))
 local Cards = require(Shared:WaitForChild("Cards"))
@@ -1909,9 +1910,14 @@ local function index(list, filter)
     end
     return names, byName
 end
-local ModeNames, ModeByName = index(Modes.LIST, function(mode) return mode.tab end)
-local EggNames, EggByName = index(Pets.EGGS)
-local DungeonNames, DungeonByName = index(Dungeons.LIST)
+-- entries tied to an event only show while that event is live
+local LiveEvent = profile().eventPhase == "live" and profile().event or nil
+local function inSeason(entry)
+    return entry.event == nil or entry.event == LiveEvent
+end
+local ModeNames, ModeByName = index(Modes.LIST, function(mode) return mode.tab and inSeason(mode) end)
+local EggNames, EggByName = index(Pets.EGGS, inSeason)
+local DungeonNames, DungeonByName = index(Dungeons.LIST, inSeason)
 local RaidNames, RaidByName = index(Raids.LIST)
 local ExpeditionById = {}
 for _, expedition in ipairs(Expeditions.LIST) do
@@ -1947,8 +1953,14 @@ local function myRaid()
 end
 
 -- a dungeon room or a joined raid holds the battle; other modes must wait
+local function exploreState()
+    local ok, state = pcall(Store.explore)
+    return ok and type(state) == "table" and state or nil
+end
+
 local function locked()
-    return myDungeon() ~= nil or myRaid() ~= nil
+    local explore = exploreState()
+    return myDungeon() ~= nil or myRaid() ~= nil or (explore ~= nil and explore.busy == true)
 end
 
 -- runs step every delay() seconds until the UI is closed or reloaded
@@ -1974,7 +1986,8 @@ local Tabs = {
     Pets = Window:AddTab({ Title = "Pets" }),
     Items = Window:AddTab({ Title = "Items" }),
     Modes = Window:AddTab({ Title = "Modes" }),
-    Event = Window:AddTab({ Title = "Event" }),
+    Explore = Window:AddTab({ Title = "Explore" }),
+    Territory = Window:AddTab({ Title = "Territory" }),
     Settings = Window:AddTab({ Title = "Settings" }),
 }
 
@@ -2145,6 +2158,10 @@ PetCare:AddToggle("AutoGrowPet", {
     Title = "Auto Grow Pet", Default = false,
     Callback = function(value) State.AutoGrowPet = value end,
 })
+PetCare:AddToggle("AutoFuse", {
+    Title = "Auto Fuse All", Description = "Merges duplicates. Can't be undone.", Default = false,
+    Callback = function(value) State.AutoFuse = value end,
+})
 
 local Away = Tabs.Modes:AddSection("Expeditions")
 Away:AddToggle("AutoExpedition", {
@@ -2176,22 +2193,24 @@ RaidSection:AddToggle("AutoRaid", {
     Callback = function(value) State.AutoRaid = value end,
 })
 
-local Halloween = Tabs.Event:AddSection("Halloween")
-local AutoKnockToggle = Halloween:AddToggle("AutoKnock", {
-    Title = "Auto Trick or Treat", Default = false,
-    Callback = function(value) State.AutoKnock = value end,
+local ExploreInfo = Tabs.Explore:AddSection("Weekly Map")
+local ExploreLabel = ExploreInfo:AddParagraph({ Title = "Explore", Content = "Loading..." })
+local ExploreRun = Tabs.Explore:AddSection("Auto")
+ExploreRun:AddToggle("AutoExplore", {
+    Title = "Auto Explore", Description = "Loot and shrines first, then the shortest way to each key boss and the Citadel.", Default = false,
+    Callback = function(value) State.AutoExplore = value end,
 })
-Halloween:AddToggle("AutoEventClaim", {
-    Title = "Auto Event Claim", Default = false,
-    Callback = function(value) State.AutoEventClaim = value end,
+
+local WarInfo = Tabs.Territory:AddSection("Guild War")
+local WarLabel = WarInfo:AddParagraph({ Title = "Territory", Content = "Loading..." })
+local WarRun = Tabs.Territory:AddSection("Auto")
+WarRun:AddToggle("AutoAttack", {
+    Title = "Auto Attack", Description = "Spends marches on the best tile next to your land.", Default = false,
+    Callback = function(value) State.AutoAttack = value end,
 })
-Halloween:AddToggle("AutoEventMode", {
-    Title = "Auto Event Mode", Default = false,
-    Callback = function(value)
-        State.AutoEventMode = value
-        -- profile.mode stays nil, so switch once on enable instead of polling
-        if value and Modes.HAUNT and not locked() then Actions.setMode(Modes.HAUNT) end
-    end,
+WarRun:AddToggle("AutoStation", {
+    Title = "Auto Station", Description = "Puts free saved decks on your front-line tiles.", Default = false,
+    Callback = function(value) State.AutoStation = value end,
 })
 
 --------------------------- [[ Workers ]] ---------------------------
@@ -2361,6 +2380,17 @@ every(function() return 3 end, function()
             Actions.growPet(pet.code, variant or 0)
         end
     end
+    if State.AutoFuse and not busy("pets") then
+        -- only fire when some pet has a full stack to merge into the next form
+        for key, count in pairs(data.pets or {}) do
+            local ok, _, variant = pcall(Pets.parse, key)
+            if ok and type(count) == "number" and count >= (Pets.FUSE or math.huge)
+                and (variant or 0) + 1 < #(Pets.VARIANTS or {}) then
+                Actions.fuseAllPets()
+                break
+            end
+        end
+    end
 end)
 
 -- same filter as the expedition screen's card list: owned, not in the deck, not field-locked, eligible, not already sent
@@ -2491,7 +2521,13 @@ every(function() return 3 end, function()
     for _, name in ipairs(DungeonNames) do
         local dungeon = DungeonByName[name]
         if State.Dungeons[name] and (data.frontier or 0) >= dungeon.unlock and dungeonRuns(data, dungeon) > 0 then
-            Actions.dungeonOpen(dungeon.code)
+            -- the SWEEP button needs the sweep pass and one clear of that dungeon; it skips the fight
+            local canSweep = (data.passes or {}).sweep == true and table.find(data.dungeonsCleared or {}, dungeon.code) ~= nil
+            if canSweep and not busy("dungeonSweep") then
+                Actions.dungeonSweep(dungeon.code, true)
+            elseif not canSweep then
+                Actions.dungeonOpen(dungeon.code)
+            end
             return
         end
     end
@@ -2505,43 +2541,240 @@ every(function() return 2 end, function()
     end
 end)
 
--- castles knocked this session, so we don't wait on the profile sync before moving to the next one
-local KnockedHere = {}
-local KnockText
-every(function() return 0.3 end, function()
-    local data = profile()
-    -- eventKnocked lists the userIds knocked today; one knock per castle per day
-    local knocked = data.eventKnocked or {}
-    local limit = Events.KNOCKS or 10
-    local text = ("Limit %d/%d"):format(#knocked, limit)
-    if text ~= KnockText then
-        KnockText = text
-        AutoKnockToggle:SetDesc(text)
+--------------------------- [[ Explore ]] ---------------------------
+
+local function shortTime(seconds)
+    seconds = math.max(0, math.floor(seconds))
+    if seconds >= 86400 then return ("%dd %dh"):format(seconds // 86400, seconds % 86400 // 3600) end
+    if seconds >= 3600 then return ("%dh %dm"):format(seconds // 3600, seconds % 3600 // 60) end
+    return ("%dm"):format(seconds // 60)
+end
+
+-- normal tiles we failed 3 times this session are skipped; bosses keep their damage, so they are always retried
+local ExploreFails = {}
+
+-- next tile: free loot or shrine next to us, else the first step of the cheapest path to a key boss or the Citadel
+local function exploreTarget(state)
+    local map = Explore.map(state.week)
+    local KIND = Explore.KIND
+    local held = Explore.held(map, state)
+    local keysDone = (state.keys or 0) >= #map.keys
+
+    local function open(id)
+        local tile = map.tiles[id]
+        if not tile or held[id] then return false end
+        if tile.kind == KIND.CITADEL then return keysDone and (state.stars or 0) < Explore.STARS end
+        return Explore.isBoss(tile.kind) or (ExploreFails[id] or 0) < 3
     end
-    if not State.AutoKnock or data.eventPhase ~= "live" or #knocked >= limit then return end
-    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-        local id = player.UserId
-        if player ~= LocalPlayer and not table.find(knocked, id) and not KnockedHere[id] then
-            KnockedHere[id] = true
-            -- the server ignores a knock until the castle was viewed, like the in-game button flow
-            Actions.viewProfile(id)
-            local started = os.clock()
-            repeat
-                task.wait()
-                local seen = Store.inspect()
-            until (type(seen) == "table" and seen.userId == id) or os.clock() - started > 3
-            pcall(Store.closeModal)
-            Actions.trickOrTreat(id)
-            return
+    local function cost(id)
+        local tile = map.tiles[id]
+        return 1 + (Explore.fights(tile.kind) and Explore.strength(map, id, state.stars) * 0.5 or 0)
+    end
+
+    for id, tile in ipairs(map.tiles) do
+        if open(id) and Explore.reachable(map, held, id)
+            and (tile.kind == KIND.CHEST or (tile.kind == KIND.SHRINE and (state.buff or 0) <= 0)) then
+            return id
         end
+    end
+
+    -- Dijkstra from every tile we can step on now; first[id] is the step that starts the path to id
+    local dist, first, done = {}, {}, {}
+    for id in ipairs(map.tiles) do
+        if open(id) and Explore.reachable(map, held, id) then
+            dist[id], first[id] = cost(id), id
+        end
+    end
+    while true do
+        local current
+        for id, d in pairs(dist) do
+            if not done[id] and (current == nil or d < dist[current]) then current = id end
+        end
+        if current == nil then break end
+        done[current] = true
+        -- the Citadel is a dead end on the map, nothing is reached through it
+        if map.tiles[current].kind ~= KIND.CITADEL then
+            for _, neighbor in ipairs(map.tiles[current].around) do
+                if open(neighbor) and not done[neighbor] then
+                    local d = dist[current] + cost(neighbor)
+                    if dist[neighbor] == nil or d < dist[neighbor] then
+                        dist[neighbor], first[neighbor] = d, first[current]
+                    end
+                end
+            end
+        end
+    end
+
+    local goal
+    for id, tile in ipairs(map.tiles) do
+        local wanted = tile.kind == KIND.KEY or (tile.kind == KIND.CITADEL and keysDone)
+        if wanted and dist[id] and (goal == nil or dist[id] < dist[goal]) then goal = id end
+    end
+    if goal then return first[goal] end
+
+    -- every boss is done: keep clearing the cheapest tile next to us for rewards
+    local cheapest
+    for id in pairs(first) do
+        if first[id] == id and (cheapest == nil or dist[id] < dist[cheapest]) then cheapest = id end
+    end
+    return cheapest
+end
+
+local ExploreRefreshAt = 0
+every(function() return 1 end, function()
+    local now = os.clock()
+    if now >= ExploreRefreshAt and (State.AutoExplore or ExploreRefreshAt == 0) then
+        -- the explore page itself refreshes every 30 seconds the same way
+        ExploreRefreshAt = now + 30
+        Actions.exploreOpen()
+    end
+
+    local data = profile()
+    local state = exploreState()
+    if (data.frontier or 0) < Explore.UNLOCK then
+        ExploreLabel:SetDesc(("Opens at stage %d (you're at %s)."):format(Explore.UNLOCK, tostring(data.frontier or 0)))
+        return
+    end
+    if not state then return end
+    local map = Explore.map(state.week)
+    local serverNow = workspace:GetServerTimeNow()
+    ExploreLabel:SetDesc(("Steps: %d/%d · +%d in %s\nKeys: %d/%d · Citadel stars: %d/%d\nShrine buff: %d fights · Cleared: %d tiles\n%s · map resets in %s"):format(
+        state.steps or 0, Explore.STEPS_MAX, Explore.STEPS_A_DAY, shortTime((state.nextSteps or serverNow) - serverNow),
+        state.keys or 0, #map.keys, state.stars or 0, Explore.STARS,
+        state.buff or 0, #(state.cleared or {}),
+        state.busy and "Army is fighting" or "Army is ready", shortTime((state.ends or serverNow) - serverNow)
+    ))
+
+    if not State.AutoExplore or not state.open or state.busy or (state.steps or 0) < 1 or busy("explore") then return end
+    if myDungeon() or myRaid() or Store.arenaFighting() then return end
+    local tile = exploreTarget(state)
+    if not tile then return end
+
+    Actions.exploreStep(tile)
+    -- a step may start a fight; wait for it to end before choosing the next tile
+    local started = os.clock()
+    repeat
+        task.wait(0.5)
+        local after = exploreState()
+    until (not busy("explore") and after and not after.busy) or os.clock() - started > 180
+    Actions.exploreOpen()
+    ExploreRefreshAt = os.clock() + 30
+    task.wait(1.5)
+    local after = exploreState()
+    local kind = map.tiles[tile] and map.tiles[tile].kind
+    if after and not table.find(after.cleared or {}, tile) and not Explore.isBoss(kind) then
+        ExploreFails[tile] = (ExploreFails[tile] or 0) + 1
     end
 end)
 
-every(function() return 5 end, function()
-    local data = profile()
-    if State.AutoEventClaim and not busy("event") then
-        Actions.eventClaim(1)
-        if data.eventPremium then Actions.eventClaim(2) end
+--------------------------- [[ Territory ]] ---------------------------
+
+local function warView()
+    local ok, view = pcall(Store.territory)
+    return ok and type(view) == "table" and view or nil
+end
+
+local function warOwner(view)
+    return function(id)
+        local tile = view.tiles[id]
+        return tile and tile.owner or 0
+    end
+end
+
+-- same checks as the tile popup's attack button
+local function canAttack(view, id, now)
+    local def, tile = Territory.TILES[id], view.tiles[id]
+    if not def or not tile or def.kind == Territory.KIND.KEEP or tile.owner == view.mine then return false end
+    if now < (tile.shield or 0) then return false end
+    return Territory.reaches(warOwner(view), view.mine, id)
+end
+
+local function warTarget(view, now)
+    local KIND = Territory.KIND
+    local best, bestScore
+    for id, tile in ipairs(view.tiles) do
+        local cost = Territory.marchCost(id)
+        if canAttack(view, id, now) and cost <= (view.left or 0) then
+            local kind = Territory.TILES[id].kind
+            local points = Territory.KINDS[kind].points
+            if kind == KIND.RUINS and not tile.looted then points += 3 end
+            if kind == KIND.TOWER then points += 1 end
+            -- favour tiles already worn down, few guards, cheap to march to
+            local share = (tile.walls or 0) > 0 and math.clamp((tile.progress or 0) / tile.walls, 0, 1) or 0
+            local score = points * (1 + share * 2) / (cost * (1 + (tile.guards or 0)))
+            if kind == KIND.DRAGON and tile.owner == 0 then score *= 0.5 end
+            if bestScore == nil or score > bestScore then best, bestScore = id, score end
+        end
+    end
+    return best
+end
+
+local function onBoard(view, now)
+    return view.status == Territory.STATUS.BOARD and (view.mine or 0) > 0 and not view.done
+        and view.phase == Territory.PHASE.BATTLE and now < (view.ends or 0)
+end
+
+local WarStatus = { [1] = "Not enlisted (a guild officer enlists)", [2] = "Enlisted, waiting for the draw", [3] = "On the board" }
+local WarRefreshAt = 0
+every(function() return 3 end, function()
+    local clock = os.clock()
+    if clock >= WarRefreshAt and (State.AutoAttack or State.AutoStation or WarRefreshAt == 0) then
+        WarRefreshAt = clock + 30
+        Actions.territoryOpen()
+    end
+    local view = warView()
+    if not view then return end
+    local now = workspace:GetServerTimeNow()
+    local seat = view.seats and view.seats[view.mine]
+    WarLabel:SetDesc(("%s\nMarches: %d/%d · Hits: %d/%d\nPlace: %s · Points: %s\n%s"):format(
+        WarStatus[view.status] or "?", view.left or 0, view.marches or 0, view.hits or 0, Territory.PRIZE_HITS,
+        (view.place or 0) > 0 and ("#" .. view.place) or "-", tostring(seat and seat.points or 0),
+        onBoard(view, now) and ("War ends in " .. shortTime(view.ends - now)) or ("Next war in " .. shortTime(Territory.nextDraw(now) - now))
+    ))
+
+    if not onBoard(view, now) or busy("territory") or now < (view.fightAt or 0) then return end
+
+    if State.AutoStation then
+        local used, count = {}, 0
+        for _, guard in ipairs(view.guards or {}) do
+            if guard.mine then used[guard.tab] = true count += 1 end
+        end
+        local slot
+        for i = 1, Deck.SAVED do
+            if not used[i] then slot = i break end
+        end
+        if slot and count < Territory.STATION_MAX then
+            -- weakest front-line tile we own: it touches land that isn't ours
+            local pick, pickScore
+            for id, tile in ipairs(view.tiles) do
+                local def = Territory.TILES[id]
+                if tile.owner == view.mine and def.kind ~= Territory.KIND.KEEP then
+                    local front = false
+                    for _, n in ipairs(Territory.NEIGHBORS[id] or {}) do
+                        if view.tiles[n] and view.tiles[n].owner ~= view.mine then front = true break end
+                    end
+                    if front then
+                        local score = Territory.KINDS[def.kind].points / (1 + (tile.guards or 0))
+                        if pickScore == nil or score > pickScore then pick, pickScore = id, score end
+                    end
+                end
+            end
+            if pick then
+                Actions.territoryStation(pick, slot, true)
+                return
+            end
+        end
+    end
+
+    if State.AutoAttack and (view.left or 0) > 0 and not locked() then
+        local tile = warTarget(view, now)
+        if tile then
+            Actions.territoryAttack(tile)
+            local started = os.clock()
+            repeat task.wait(0.5) until not busy("territory") or os.clock() - started > 30
+            Actions.territoryOpen()
+            WarRefreshAt = os.clock() + 30
+        end
     end
 end)
 
