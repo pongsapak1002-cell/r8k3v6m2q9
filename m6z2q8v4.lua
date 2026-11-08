@@ -1979,6 +1979,7 @@ local function BuildAutoFarm()
 		BREAK_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial", "Inferno" }
 	end
 	-- shortcut: animal-only rarities above the zone ones, ranked by the game's Blood Moon candy values; a new one needs adding here
+	local ZONE_COUNT = #BREAK_RARITIES -- one egg rarity per zone
 	local STEAL_RARITIES = table.clone(BREAK_RARITIES)
 	for _, r in ipairs({ "Void", "Omega", "Spectral" }) do
 		if not table.find(STEAL_RARITIES, r) then
@@ -2024,7 +2025,7 @@ local function BuildAutoFarm()
 		Speed = 55, Rarity = {}, Mutation = {}, Collected = 0, MinIncome = 0, Unread = 0,
 	}
 	TT = { Running = false, Job = 0, Speed = 55, Working = false, Paused = false, EnabledSwing = false, Zone = {} }
-	for z = 1, 11 do
+	for z = 1, ZONE_COUNT do
 		TT.Zone[z] = true
 	end
 
@@ -2396,25 +2397,7 @@ local function BuildAutoFarm()
 		return g and g:GetAttribute("Rarity")
 	end
 
-	-- Halloween event targets (Event tab). Haunted houses and candy piles take the same pickaxe hits as eggs.
-	local CollectionService = game:GetService("CollectionService")
-	local EVT = { House = false, Candy = false, Collect = false }
-	local pickups = {}
-	track(Workspace.DescendantAdded:Connect(function(d)
-		if d.Name == "CandyCornPickup" and d:IsA("BasePart") then
-			pickups[d] = true
-		end
-	end))
-	-- shortcut: bag attribute name and 500 capacity are read from HalloweenEventConfig, not yet seen live
-	local function bagFull()
-		return (tonumber(LocalPlayer:GetAttribute("CandyHeistBag")) or 0) >= 500
-	end
-	local bankPart -- the Safe Zone hitbox: walking into it banks the candy bag
-
 	local function eggAlive(part)
-		if part and part == bankPart then
-			return bagFull()
-		end
 		return part and part.Parent and part:GetAttribute("Broken") ~= true and (part:GetAttribute("Health") or 1) > 0
 	end
 
@@ -2428,55 +2411,7 @@ local function BuildAutoFarm()
 		return math.floor(s.X * s.Y * s.Z * 100 + 0.5)
 	end
 
-	local function pickaxeDamage()
-		local ok, dmg = pcall(function()
-			return require(ReplicatedStorage.Shared.PickaxeConfig).GetDamage(LocalPlayer:GetAttribute("PickaxeTier"))
-		end)
-		return ok and tonumber(dmg) or 1
-	end
-
-	local function eventTargets()
-		local out, hrp = {}, getHRP()
-		local function add(part)
-			out[#out + 1] = { part = part, size = 0, rank = 0, dist = hrp and (part.Position - hrp.Position).Magnitude or 0 }
-		end
-		if EVT.Candy and bagFull() then
-			local hitboxes = Workspace:FindFirstChild("ZoneHitboxes", true)
-			bankPart = hitboxes and hitboxes:FindFirstChild("SafeZone")
-			if bankPart then
-				add(bankPart)
-				return out
-			end
-		end
-		if EVT.Collect then
-			for p in pairs(pickups) do
-				if not p.Parent then
-					pickups[p] = nil
-				elseif hrp and (p.Position - hrp.Position).Magnitude < 150 then
-					add(p)
-				end
-			end
-		end
-		-- only what the pickaxe finishes in about a minute, so it never parks on a house it cannot break
-		local maxHealth = pickaxeDamage() * 120
-		for tag, on in pairs({ BreakableHalloweenDoor = EVT.House, BreakableCandyPile = EVT.Candy }) do
-			if on then
-				for _, part in ipairs(CollectionService:GetTagged(tag)) do
-					if part:IsA("BasePart") and eggAlive(part) and (tonumber(part:GetAttribute("Health")) or 0) <= maxHealth then
-						add(part)
-					end
-				end
-			end
-		end
-		table.sort(out, function(a, b) return a.dist < b.dist end)
-		return out
-	end
-
 	local function scanEggs()
-		local ev = eventTargets()
-		if #ev > 0 then
-			return ev
-		end
 		local out = {}
 		local build = Workspace:FindFirstChild("Build")
 		local zb = build and build:FindFirstChild("ZoneBuilds")
@@ -3155,7 +3090,7 @@ local function BuildAutoFarm()
 		end
 	end)
 	local TT_ZONES = {}
-	for z = 1, 11 do
+	for z = 1, ZONE_COUNT do
 		TT_ZONES[z] = "Zone " .. z
 	end
 	_t, ttZoneDrop = Dropdown(Page, "Titanic Zone", {
@@ -3222,18 +3157,33 @@ local function BuildAutoFarm()
 
 	local START = Vector3.new(-72.500, 3.693, -139.970)
 	local SAFE = Vector3.new(-72.500, 3.693, 0)
-	local LAST = Vector3.new(-4210.0, 3.693, -139.970)
 	local GROUND_Y = START.Y
-	local ZONE_X = {
-		[1] = { -174.5, -81.5 }, [2] = { -304.0, -187.0 }, [3] = { -463.2, -315.8 },
-		[4] = { -681.8, -475.2 }, [5] = { -960.8, -694.2 }, [6] = { -1299.8, -973.2 },
-		[7] = { -1819.5, -1311.5 }, [8] = { -2338.0, -1831.0 }, [9] = { -2863.0, -2350.0 },
-		[10] = { -3565.0, -2863.0 }, [11] = { -4225.1, -3565.0 },
-	}
+	-- zone X ranges come from the game's own zone hitboxes, so new zones need no edit here
+	local ZONE_X = {}
+	local zoneHitboxes = Workspace:FindFirstChild("ZoneHitboxes", true)
+	for z = 1, ZONE_COUNT do
+		local hb = zoneHitboxes and zoneHitboxes:FindFirstChild(tostring(z))
+		if hb and hb:IsA("BasePart") then
+			ZONE_X[z] = { hb.Position.X - hb.Size.X / 2, hb.Position.X + hb.Size.X / 2 }
+		end
+	end
+	if not ZONE_X[1] then
+		ZONE_X = {
+			[1] = { -174.5, -81.5 }, [2] = { -304.0, -187.0 }, [3] = { -463.2, -315.8 },
+			[4] = { -681.8, -475.2 }, [5] = { -960.8, -694.2 }, [6] = { -1299.8, -973.2 },
+			[7] = { -1819.5, -1311.5 }, [8] = { -2338.0, -1831.0 }, [9] = { -2863.0, -2350.0 },
+			[10] = { -3565.0, -2863.0 }, [11] = { -4225.1, -3565.0 },
+		}
+	end
+	local farX = math.huge
+	for _, range in pairs(ZONE_X) do
+		farX = math.min(farX, range[1])
+	end
+	local LAST = Vector3.new(farX + 15, 3.693, -139.970)
 	local stJob = 0
 
 	local function inAnyZone(pos)
-		return pos.X <= ZONE_X[1][2] and pos.X >= math.min(ZONE_X[11][1], LAST.X) - 5
+		return pos.X <= ZONE_X[1][2] and pos.X >= farX - 5
 	end
 	EventGate.Safe = SAFE
 	EventGate.InZone = inAnyZone
@@ -4249,7 +4199,7 @@ local function BuildAutoFarm()
 
 	local function ttZoneList()
 		local out = {}
-		for z = 1, 11 do
+		for z = 1, ZONE_COUNT do
 			if TT.Zone[z] then
 				table.insert(out, "Zone " .. z)
 			end
@@ -4307,59 +4257,6 @@ local function BuildAutoFarm()
 		if data.AutoTreadmill == true then task.delay(0.8, function() if tmToggle then tmToggle.Set(true) end end) end
 		return true
 	end
-
-	-- ===== Event tab: Halloween =====
-	local EvPage = CreatePage("Event")
-	Section(EvPage, "Halloween")
-	for _, spec in ipairs({ { "Auto House of Horrors", "House" }, { "Auto Candy Carnage", "Candy" }, { "Auto Collect Candy", "Collect" } }) do
-		Toggle(EvPage, spec[1], false, function(on)
-			EVT[spec[2]] = on
-			-- the event targets ride on Auto Break's walk + AutoSwing loop
-			if on and not SW.Running then
-				swToggle.Set(true)
-			end
-		end, nil, spec[2] == "House" and "Turns on Auto Break" or nil)
-	end
-
-	Section(EvPage, "Halloween Shop")
-	local okShop, ShopCfg = pcall(function() return require(ReplicatedStorage.Shared.HalloweenShopConfig) end)
-	local HS = { Potions = {}, Eggs = {}, On = false }
-	local potionNames, eggNames, byTitle = {}, {}, {}
-	if okShop then
-		for id, p in pairs(ShopCfg.Potions) do
-			potionNames[#potionNames + 1] = p.Title
-			byTitle[p.Title] = { "BuyPotion", id, p.Price }
-		end
-		for id, e in pairs(ShopCfg.Eggs) do
-			local title = (id:gsub("HalloweenEgg", "Halloween Egg "))
-			eggNames[#eggNames + 1] = title
-			byTitle[title] = { "BuyEgg", id, e.Price }
-		end
-		table.sort(potionNames)
-		table.sort(eggNames)
-	end
-	Dropdown(EvPage, "Potions", { Multi = true, Options = potionNames, Default = {}, OnChange = function(list) HS.Potions = list end })
-	Dropdown(EvPage, "Eggs", { Multi = true, Options = eggNames, Default = {}, OnChange = function(list) HS.Eggs = list end })
-	Toggle(EvPage, "Auto Buy Selected", false, function(on)
-		HS.On = on
-	end, nil, "Needs 1B SpeedPower")
-	task.spawn(function()
-		while not closed do
-			local remote = okShop and HS.On and ReplicatedStorage:FindFirstChild(ShopCfg.RemoteName)
-			if remote then
-				for _, list in ipairs({ HS.Potions, HS.Eggs }) do
-					for _, title in ipairs(list) do
-						local item = byTitle[title]
-						local stock = item and LocalPlayer:GetAttribute("HalloweenStock_" .. item[2])
-						if item and (tonumber(LocalPlayer:GetAttribute("CandyCorn")) or 0) >= item[3] and (stock == nil or stock > 0) then
-							pcall(remote.InvokeServer, remote, item[1], item[2])
-						end
-					end
-				end
-			end
-			task.wait(5)
-		end
-	end)
 
 	addCleanup(function()
 		swStop()
