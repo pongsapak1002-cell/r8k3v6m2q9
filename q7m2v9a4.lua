@@ -200,7 +200,8 @@ local GradeOrder = {
     ["Z"] = 8,
     ["Z+"] = 9,
     ["神"] = 10,
-    ["∞"] = 11
+    ["∞"] = 11,
+    ["Ω"] = 12
 }
 
 local RarityOrder = {
@@ -288,17 +289,11 @@ local State = {
     QuirkRollDelay = 0.35,
     ProtectedQuirks = {},
 
-    -- Halloween event
-    EventPumpkinRoll = false,
-    EventPumpkinMulti = false,
-    EventHouseWing = "Front Yard",
-    EventTrickOrTreat = false,
-    EventQuests = false,
-    EventPass = false,
-    EventShopAuto = false,
-    EventShopItems = {},
-    EventUpgradesAuto = false,
-    EventUpgradePicks = {},
+    -- Awakening and Potion Fusing
+    AutoAwaken = false,
+    AwakenUnits = {},
+    AutoFusePotions = false,
+    FusePotions = {},
 
     -- Rebirth points
     AutoRebirthStats = false,
@@ -1605,30 +1600,17 @@ if ((getgenv and getgenv()) or _G).TH == true and VaderUI.GUI then
         ["Trait reroll requested."] = "ส่งคำขอสุ่มเทรตแล้ว", ["Quirk reroll requested."] = "ส่งคำขอสุ่มเควิร์กแล้ว",
         ["Waiting for server confirmation."] = "รอเซิร์ฟเวอร์ยืนยัน",
         ["Lock on server."] = "ล็อกบนเซิร์ฟเวอร์",
-        -- Event
-        ["Event"] = "อีเวนต์", ["No Event"] = "ไม่มีอีเวนต์", ["No event is running."] = "ตอนนี้ไม่มีอีเวนต์",
-        ["Pumpkin Dice"] = "ลูกเต๋าฟักทอง", ["Auto Pumpkin Dice"] = "ทอยลูกเต๋าฟักทองอัตโนมัติ",
-        ["Several dice per roll."] = "ทอยหลายลูกต่อครั้ง",
-        ["Game sells these on roll."] = "เกมขายตัวที่เลือกทันทีที่ทอยได้",
-        ["Pumpkin Dice Stopped"] = "หยุดทอยลูกเต๋าฟักทอง",
-        ["Haunted House"] = "บ้านผีสิง", ["Wing"] = "โซน", ["Wing to farm."] = "โซนที่จะฟาร์ม",
-        ["Auto Haunted House"] = "ฟาร์มบ้านผีสิงอัตโนมัติ", ["Farms Pumpkins and Candy."] = "ฟาร์มฟักทองและขนม",
-        ["Trick or Treat"] = "ทริกออร์ทรีต", ["Auto Trick or Treat"] = "เคาะประตูอัตโนมัติ",
-        ["Visits doors for Candy."] = "เดินเคาะประตูเก็บขนม", ["Go to Island"] = "ไปเกาะอีเวนต์",
-        ["Event island."] = "วาร์ปไปเกาะ", ["Back to Hub"] = "กลับจุดเกิด", ["Main area."] = "วาร์ปกลับ",
-        ["Rewards"] = "รางวัล", ["Auto Event Quests"] = "รับเควสอีเวนต์อัตโนมัติ", ["Hourly and daily."] = "รายชั่วโมงและรายวัน",
-        ["Auto Pumpkin Pass"] = "รับ Pumpkin Pass อัตโนมัติ", ["Claims unlocked tiers."] = "รับขั้นที่ปลดล็อกแล้ว",
-        ["Candy Shop"] = "ร้านขนม", ["Items to buy."] = "ของที่จะซื้อ", ["Auto Buy"] = "ซื้ออัตโนมัติ",
-        ["Spends Candy on selected items."] = "ใช้ขนมซื้อของที่เลือก",
-        ["Candy Upgrades"] = "อัปเกรดด้วยขนม", ["Upgrades to buy."] = "อัปเกรดที่จะซื้อ",
-        ["Auto Candy Upgrades"] = "อัปเกรดด้วยขนมอัตโนมัติ", ["Cheapest first."] = "ซื้ออันถูกสุดก่อน",
+        ["Awakening"] = "ปลุกพลัง", ["Auto Awaken"] = "ปลุกพลังอัตโนมัติ", ["Units"] = "ยูนิต",
+        ["Units to awaken."] = "ยูนิตที่จะปลุกพลัง", ["Reload owned units."] = "อัปเดตรายชื่อยูนิต",
+        ["Uses spare copies and cash."] = "ใช้ตัวซ้ำและเงิน",
+        ["Potion Fusing"] = "รวมยา", ["Potions"] = "ยา", ["Auto Fuse Potions"] = "รวมยาอัตโนมัติ",
+        ["Fuses every full set."] = "รวมทุกชุดที่ครบ",
         ["Rebirth Stats"] = "แต้มรีเบิร์ธ", ["Stats"] = "สเตตัส", ["Points go to these."] = "ลงแต้มที่สเตตัสเหล่านี้",
         ["Auto Rebirth Stats"] = "ลงแต้มรีเบิร์ธอัตโนมัติ", ["Spend points evenly."] = "ลงแต้มเท่า ๆ กัน",
     }
     -- Labels built from data keep their variable part.
     local patterns = {
-        {"^Lock Grade (.+)$", "ล็อกเกรด %1"},
-        {"^(%d+) Pumpkins per roll%.$", "ใช้ %1 ฟักทองต่อครั้ง"}, {"^Roll (%d+)x$", "ทอย %1 ลูก"},
+        {"^Lock Grade (.+)$", "ล็อกเกรด %1"}, {"^(%d+) make 1 higher tier%.$", "%1 ขวดรวมเป็นขั้นสูงขึ้น 1 ขวด"},
         {"^Lock Trait (.+)$", "ล็อกเทรต %1"}, {"^Lock Quirk (.+)$", "ล็อกเควิร์ก %1"},
         {"^Current grade is locked: (.+)$", "เกรดปัจจุบันถูกล็อก: %1"},
         {"^Current trait is locked: (.+)$", "เทรตปัจจุบันถูกล็อก: %1"},
@@ -1664,7 +1646,7 @@ local Tabs = {
     Grades   = Window:AddTab({Title = "Grades"}),
     Traits   = Window:AddTab({Title = "Traits"}),
     Quirks   = Window:AddTab({Title = "Quirks"}),
-    Event    = Window:AddTab({Title = "Event"}),
+    Awakening = Window:AddTab({Title = "Awakening"}),
     Upgrades = Window:AddTab({Title = "Upgrades & Dice"}),
     Webhook  = Window:AddTab({Title = "Webhook"}),
     Settings = Window:AddTab({Title = "Settings"}),
@@ -2245,7 +2227,8 @@ local gradeTargetOptions = {
     "Z",
     "Z+",
     "God",
-    "Infinity"
+    "Infinity",
+    "Omega"
 }
 
 secGrade:AddDropdown("DropTargetGrade", {
@@ -2254,7 +2237,7 @@ secGrade:AddDropdown("DropTargetGrade", {
     Values      = gradeTargetOptions,
     Default     = "S",
     Callback    = function(v)
-        local cleanGrade = ({God = "神", Infinity = "∞"})[v] or (string.match(v, "^[^%s]+") or v)
+        local cleanGrade = ({God = "神", Infinity = "∞", Omega = "Ω"})[v] or (string.match(v, "^[^%s]+") or v)
         State.TargetGrade = cleanGrade
     end
 })
@@ -2306,12 +2289,12 @@ secGradeManual:AddButton({
 
 local secGradeServerProtect = Tabs.Grades:AddSection("Server Lock")
 
-local serverProtectList = {"S", "S+", "Z", "Z+", "神", "∞"}
+local serverProtectList = {"S", "S+", "Z", "Z+", "神", "∞", "Ω"}
 for _, g in ipairs(serverProtectList) do
     local getter = DataController.ProtectedGrades and DataController.ProtectedGrades[g]
     State.ProtectedGrades[g] = getter and getter() == true or false
     secGradeServerProtect:AddToggle("TogServerProt_" .. g, {
-        Title       = "Lock Grade " .. (({["神"] = "God", ["∞"] = "Infinity"})[g] or g),
+        Title       = "Lock Grade " .. (({["神"] = "God", ["∞"] = "Infinity", ["Ω"] = "Omega"})[g] or g),
         Description = "Lock on server.",
         Default     = State.ProtectedGrades[g],
         Callback    = function(val)
@@ -2472,215 +2455,113 @@ do
     end
 end
 
--- Halloween event: uses the game's own event modules, so values follow future balance changes.
+-- Awakening and Potion Fusing only work next to their altar, so each batch steps over and back.
 do
-    local H = RS.Framework.Features:FindFirstChild("Halloween")
-    local function find(...)
-        local cur = network
-        for _, name in ipairs({...}) do cur = cur and cur:FindFirstChild(name) end
-        return cur
-    end
-    local function req(name)
-        local ok, m = pcall(function() return require(H[name]) end)
-        return ok and m or nil
-    end
-    local Ev = {
-        RollRF = find("PumpkinDiceService", "RF", "Roll"),
-        AutoSellRE = find("PumpkinDiceService", "RE", "SetAutoSell"),
-        QuestRE = find("HalloweenQuestService", "RE", "Claim"),
-        PassRE = find("HalloweenService", "RE", "ClaimAllPath"),
-        BuyRE = find("HalloweenService", "RE", "BuyOffer"),
-        TeleportRF = find("HalloweenService", "RF", "Teleport"),
-        KnockedRE = find("TrickOrTreatService", "RE", "Knocked"),
-        Dice = H and req("PumpkinDice"), Quests = H and req("HalloweenQuests"),
-        Shop = H and req("HalloweenShop"), House = H and req("HauntedHouse"),
-    }
-    local function amount(item)
-        local getter = DataController.Inventory and DataController.Inventory[item]
-        local data = getter and getter()
-        return data and tonumber(data.amount) or 0
-    end
-    local function stopToggle(id, title, message)
-        local toggle = VaderUI.Options[id]
-        if toggle then toggle:SetValue(false) end
-        VaderUI:Notify({Title=title, Content=message, Duration=3})
+    local F = RS.Framework.Features
+    local AwakenRF = network:FindFirstChild("AwakeningService")
+    AwakenRF = AwakenRF and AwakenRF:FindFirstChild("RF") and AwakenRF.RF:FindFirstChild("Awaken")
+    local FuseRF = network:FindFirstChild("PotionFusingService")
+    FuseRF = FuseRF and FuseRF:FindFirstChild("RF") and FuseRF.RF:FindFirstChild("Fuse")
+    local AwakenUtil, FuseUtil = nil, nil
+    pcall(function() AwakenUtil = require(F.Awakening.AwakeningUtil) end)
+    pcall(function() FuseUtil = require(F.PotionFusing.PotionFusingUtil) end)
+
+    local function atZone(zoneName, action)
+        local zones = workspace:FindFirstChild("Zones")
+        local zone = zones and zones:FindFirstChild(zoneName)
+        local character = LP.Character
+        if not (zone and character and character:FindFirstChild("HumanoidRootPart")) then return false end
+        local part = zone:IsA("BasePart") and zone or zone:FindFirstChildWhichIsA("BasePart", true)
+        local target = zone:IsA("Model") and zone:GetPivot() or (part and part.CFrame)
+        if not target then return false end
+        local back = character:GetPivot()
+        character:PivotTo(target + Vector3.new(0, 3, 0))
+        task.wait(0.5) -- let the server see the new position before asking
+        local ok = pcall(action)
+        if character.Parent then character:PivotTo(back) end
+        return ok
     end
 
-    if not H then
-        Tabs.Event:AddSection("Event"):AddParagraph({Title="No Event", Content="No event is running."})
+    -- Same rules Auto Sell uses, so awakening never eats a unit the seller would keep.
+    local function isValuable(unit)
+        local a = unit.attributes or {}
+        if (GradeOrder[a.grade] or 0) >= 6 or a.locked then return true end
+        local trait = a.trait and TraitsModule[a.trait]
+        if trait and (trait.protected or State.ProtectedTraits[a.trait]) then return true end
+        local quirk = a.quirk and Quirk.Defs[a.quirk]
+        return quirk and (quirk.protected or State.ProtectedQuirks[a.quirk]) or false
     end
 
-    -- Pumpkin Dice: the server allows one roll per 2s and costs Pumpkins.
-    if Ev.RollRF and Ev.Dice then
-        local sec = Tabs.Event:AddSection("Pumpkin Dice")
-        sec:AddToggle("TogEventPumpkin", {Title="Auto Pumpkin Dice", Description=Ev.Dice.COST .. " Pumpkins per roll.",
-            Default=false, Callback=function(v) State.EventPumpkinRoll = v end})
-        sec:AddToggle("TogEventPumpkinMulti", {Title="Roll " .. Ev.Dice.MULTI .. "x", Description="Several dice per roll.",
-            Default=false, Callback=function(v) State.EventPumpkinMulti = v end})
-        if Ev.AutoSellRE then
-            local names, sold = {}, {}
-            for _, unit in ipairs(Ev.Dice.Units) do
-                table.insert(names, unit.id)
-                local getter = DataController.Halloween and DataController.Halloween.DiceAutoSell
-                    and DataController.Halloween.DiceAutoSell[unit.id]
-                sold[unit.id] = getter and getter() == true or nil
-            end
-            sec:AddDropdown("DropEventAutoSell", {Title="Auto Sell", Description="Game sells these on roll.",
-                Values=names, Multi=true, Default=sold,
-                Callback=function(selected)
-                    task.spawn(function()
-                        for _, name in ipairs(names) do
-                            local want = selected[name] == true
-                            if (sold[name] == true) ~= want then
-                                sold[name] = want or nil
-                                Ev.AutoSellRE:FireServer(name, want)
-                                task.wait(0.25) -- server debounce is 0.2s
-                            end
-                        end
-                    end)
-                end})
-        end
-        task.spawn(function()
-            while isCurrentRun() do
-                task.wait(2.6)
-                if State.EventPumpkinRoll then
-                    local count = State.EventPumpkinMulti and Ev.Dice.MULTI or 1
-                    if amount("Pumpkins") >= Ev.Dice.COST * count then
-                        local ok, res = pcall(function() return Ev.RollRF:InvokeServer(count) end)
-                        if ok and type(res) == "table" and res.ok == false and res.message then
-                            State.EventPumpkinRoll = false
-                            stopToggle("TogEventPumpkin", "Pumpkin Dice Stopped", res.message)
-                        end
-                    end
+    if AwakenRF and AwakenUtil then
+        local function ownedUnitNames()
+            local seen, names = {}, {}
+            local inv = DataController.Inventory and DataController.Inventory() or {}
+            for _, unit in pairs(inv) do
+                local cfg = type(unit) == "table" and unit.name and EntryRegistry.getEntryConfig(unit.name)
+                if cfg and cfg.kind == "Unit" and not seen[unit.name] then
+                    seen[unit.name] = true
+                    table.insert(names, unit.name)
                 end
             end
-        end)
-    end
-
-    -- Haunted House wings are towers, so this drives the existing Auto Tower controls.
-    if Ev.House then
-        local sec = Tabs.Event:AddSection("Haunted House")
-        local wings = {}
-        for _, wing in ipairs(Ev.House.Wings) do table.insert(wings, wing.name) end
-        sec:AddDropdown("DropEventWing", {Title="Wing", Description="Wing to farm.", Values=wings,
-            Default=State.EventHouseWing, Callback=function(v) State.EventHouseWing = v end})
-        sec:AddToggle("TogEventHouse", {Title="Auto Haunted House", Description="Farms Pumpkins and Candy.", Default=false,
-            Callback=function(v)
-                local opt = VaderUI.Options
-                if v and opt.DropSelectTower then opt.DropSelectTower:SetValue(State.EventHouseWing) end
-                if opt.TogAutoTower then opt.TogAutoTower:SetValue(v) end
-            end})
-    end
-
-    -- Trick or Treat: the server counts a knock only while standing near a door,
-    -- with a 30s cooldown per door and no faster than 60 studs/s between doors.
-    if Ev.KnockedRE then
-        local CollectionService = game:GetService("CollectionService")
-        local sec = Tabs.Event:AddSection("Trick or Treat")
-        sec:AddToggle("TogEventTreat", {Title="Auto Trick or Treat", Description="Visits doors for Candy.", Default=false,
-            Callback=function(v) State.EventTrickOrTreat = v end})
-        if Ev.TeleportRF then
-            sec:AddButton({Title="Go to Island", Description="Event island.",
-                Callback=function() pcall(function() Ev.TeleportRF:InvokeServer("Island") end) end})
-            sec:AddButton({Title="Back to Hub", Description="Main area.",
-                Callback=function() pcall(function() Ev.TeleportRF:InvokeServer("Hub") end) end})
+            table.sort(names)
+            return names
         end
-        local knocked = false
-        table.insert(_conns, Ev.KnockedRE.OnClientEvent:Connect(function() knocked = true end))
-        task.spawn(function()
-            local readyAt, lastKnock, lastPos = {}, 0, nil
-            while isCurrentRun() do
-                task.wait(0.5)
-                local character = LP.Character
-                if State.EventTrickOrTreat and character and character:FindFirstChild("HumanoidRootPart")
-                    and workspace:GetServerTimeNow() >= (LP:GetAttribute("TrickOrTreatReadyAt") or 0) then
-                    local doors = CollectionService:GetTagged("TrickOrTreatDoor")
-                    if #doors == 0 and Ev.TeleportRF then
-                        pcall(function() Ev.TeleportRF:InvokeServer("Island") end)
-                        task.wait(2)
-                    end
-                    for _, door in ipairs(doors) do
-                        if not (State.EventTrickOrTreat and isCurrentRun()) then break end
-                        if door:IsA("BasePart") and os.clock() >= (readyAt[door] or 0) then
-                            character = LP.Character
-                            if not (character and character:FindFirstChild("HumanoidRootPart")) then break end
-                            -- Arrive at once and stand until the server's travel gap passes; it knocks as soon as it does.
-                            local gap = lastPos and math.max(2, (door.Position - lastPos).Magnitude / 60) - (os.clock() - lastKnock) or 0
-                            local front = door:GetAttribute("TrickOrTreatFront") or door.CFrame.LookVector
-                            knocked = false
-                            character:PivotTo(CFrame.new(door.Position + front * 5, door.Position))
-                            local arrived = os.clock()
-                            while not knocked and os.clock() - arrived < math.max(gap, 0) + 0.8 do task.wait(0.05) end
-                            if knocked then
-                                -- The candy is granted server-side, so there is no need to stay for the animation.
-                                lastKnock, lastPos = os.clock(), door.Position
-                                readyAt[door] = os.clock() + 31
-                            else
-                                readyAt[door] = os.clock() + 10
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-    end
+        local sec = Tabs.Awakening:AddSection("Auto Awaken")
+        local drop = sec:AddDropdown("DropAwakenUnits", {Title="Units", Description="Units to awaken.", Values=ownedUnitNames(),
+            Multi=true, Default=State.AwakenUnits, Callback=function(v) State.AwakenUnits = v end})
+        sec:AddButton({Title="Refresh Units", Description="Reload owned units.", Callback=function()
+            drop:SetValues(ownedUnitNames())
+            drop:SetValue(State.AwakenUnits)
+        end})
+        sec:AddToggle("TogAutoAwaken", {Title="Auto Awaken", Description="Uses spare copies and cash.", Default=false,
+            Callback=function(v) State.AutoAwaken = v end})
 
-    -- Candy Upgrades: buy the cheapest picked upgrade that is not maxed.
-    local UpgradeRE = find("HalloweenService", "RE", "BuyUpgrade")
-    local Upgrades = H and req("CandyUpgrades")
-    if UpgradeRE and Upgrades and DataController.CandyUpgrades then
-        local secUp = Tabs.Event:AddSection("Candy Upgrades")
-        local titles, byTitle = {}, {}
-        for _, upgrade in ipairs(Upgrades.List) do
-            table.insert(titles, upgrade.title)
-            byTitle[upgrade.title] = upgrade
-        end
-        secUp:AddDropdown("DropEventUpgrades", {Title="Upgrades", Description="Upgrades to buy.", Values=titles, Multi=true,
-            Default=State.EventUpgradePicks, Callback=function(v) State.EventUpgradePicks = v end})
-        secUp:AddToggle("TogEventUpgrades", {Title="Auto Candy Upgrades", Description="Cheapest first.", Default=false,
-            Callback=function(v) State.EventUpgradesAuto = v end})
         task.spawn(function()
             while isCurrentRun() do
-                task.wait(1)
-                if State.EventUpgradesAuto then
+                task.wait(5)
+                if State.AutoAwaken then
+                    local jobs = {}
                     pcall(function()
-                        local best, bestCost = nil, math.huge
-                        for title, selected in pairs(State.EventUpgradePicks) do
-                            local upgrade = selected and byTitle[title]
-                            local level = upgrade and (DataController.CandyUpgrades[upgrade.id]() or 0)
-                            if upgrade and level < upgrade.maxLevel then
-                                local cost = Upgrades.GetCost(upgrade, level + 1)
-                                if cost < bestCost then best, bestCost = upgrade, cost end
+                        local inv, slots = DataController.Inventory(), DataController.Slots()
+                        local money = tonumber(DataController.Money()) or 0
+                        local mult = BuffController.GetBuff("Money Multiplier") or 1
+                        -- Awaken the strongest copy in each name and mutation group.
+                        local best = {}
+                        for key, unit in pairs(inv) do
+                            local cfg = type(unit) == "table" and unit.name and State.AwakenUnits[unit.name]
+                                and EntryRegistry.getEntryConfig(unit.name)
+                            if cfg and cfg.kind == "Unit" then
+                                local a = unit.attributes or {}
+                                local group = unit.name .. "|" .. tostring(a.mutation)
+                                local stars = tonumber(a.stars) or 0
+                                local income = cfg.income and cfg.income(a) or 0
+                                local cur = best[group]
+                                if not cur or stars > cur.stars or (stars == cur.stars and income > cur.income) then
+                                    best[group] = {key = key, unit = unit, stars = stars, income = income}
+                                end
                             end
                         end
-                        if best and amount("Candy") >= bestCost then UpgradeRE:FireServer(best.id) end
-                    end)
-                end
-            end
-        end)
-    end
-
-    -- Claims: quests, Pumpkin Pass, and the Candy Shop.
-    local sec = H and Tabs.Event:AddSection("Rewards")
-    if sec and Ev.QuestRE and Ev.Quests then
-        sec:AddToggle("TogEventQuests", {Title="Auto Event Quests", Description="Hourly and daily.", Default=false,
-            Callback=function(v) State.EventQuests = v end})
-        task.spawn(function()
-            while isCurrentRun() do
-                task.wait(2)
-                if State.EventQuests and DataController.Halloween then
-                    for _, period in ipairs(Ev.Quests.PERIODS) do
-                        pcall(function()
-                            local config = Ev.Quests[period]
-                            local data = DataController.Halloween[config.dataKey]()
-                            if type(data) ~= "table" then return end
-                            local progress, claimed = data.progress or {}, data.claimed or {}
-                            for _, quest in ipairs(config.pool) do
-                                if table.find(data.ids or {}, quest.id) and not claimed[quest.id]
-                                    and (progress[quest.id] or 0) >= quest.target then
-                                    Ev.QuestRE:FireServer(period, quest.id)
-                                    task.wait(0.3)
+                        for _, pick in pairs(best) do
+                            local nextStar = AwakenUtil.GetNextStar(pick.unit.name, pick.unit.attributes or {}, mult)
+                            if nextStar and money >= nextStar.cost then
+                                -- The server takes the lowest-income copies first; check exactly those.
+                                local copies = AwakenUtil.GetCopies(inv, slots, pick.key)
+                                local safe = #copies >= nextStar.copies
+                                for i = 1, math.min(nextStar.copies, #copies) do
+                                    if not inv[copies[i]] or isValuable(inv[copies[i]]) then safe = false break end
                                 end
+                                if safe then
+                                    money = money - nextStar.cost
+                                    table.insert(jobs, pick.key)
+                                end
+                            end
+                        end
+                    end)
+                    if #jobs > 0 then
+                        atZone("Awakening", function()
+                            for _, key in ipairs(jobs) do
+                                AwakenRF:InvokeServer(key)
+                                task.wait(0.35) -- server debounce is 0.3s
                             end
                         end)
                     end
@@ -2688,41 +2569,33 @@ do
             end
         end)
     end
-    if sec and Ev.PassRE then
-        sec:AddToggle("TogEventPass", {Title="Auto Pumpkin Pass", Description="Claims unlocked tiers.", Default=false,
-            Callback=function(v) State.EventPass = v end})
-        task.spawn(function()
-            while isCurrentRun() do
-                -- The server skips tiers that are locked or already claimed.
-                if State.EventPass then pcall(function() Ev.PassRE:FireServer() end) end
-                task.wait(30)
+
+    if FuseRF and FuseUtil then
+        local potions = {}
+        pcall(function()
+            for name, entry in pairs(EntryRegistry.allEntries()) do
+                if entry.kind == "Boost" and FuseUtil.GetNextTier(name) then table.insert(potions, name) end
             end
         end)
-    end
-    if sec and Ev.BuyRE and Ev.Shop then
-        local labels, indexOf = {}, {}
-        for i, offer in ipairs(Ev.Shop) do
-            local label = offer.name .. " (" .. offer.candy .. ")"
-            table.insert(labels, label)
-            indexOf[label] = i
-        end
-        sec:AddDropdown("DropEventShop", {Title="Candy Shop", Description="Items to buy.", Values=labels, Multi=true,
-            Default=State.EventShopItems, Callback=function(v) State.EventShopItems = v end})
-        sec:AddToggle("TogEventShop", {Title="Auto Buy", Description="Spends Candy on selected items.", Default=false,
-            Callback=function(v) State.EventShopAuto = v end})
+        table.sort(potions)
+        local sec = Tabs.Items:AddSection("Potion Fusing")
+        sec:AddDropdown("DropFusePotions", {Title="Potions", Description=FuseUtil.FUSE_COST .. " make 1 higher tier.",
+            Values=potions, Multi=true, Default=State.FusePotions, Callback=function(v) State.FusePotions = v end})
+        sec:AddToggle("TogAutoFusePotions", {Title="Auto Fuse Potions", Description="Fuses every full set.", Default=false,
+            Callback=function(v) State.AutoFusePotions = v end})
+
         task.spawn(function()
             while isCurrentRun() do
-                task.wait(3)
-                if State.EventShopAuto then
-                    local candy = amount("Candy")
-                    for label, selected in pairs(State.EventShopItems) do
-                        local index = indexOf[label]
-                        if selected and index and candy >= Ev.Shop[index].candy then
-                            candy = candy - Ev.Shop[index].candy
-                            Ev.BuyRE:FireServer(index)
-                            task.wait(0.3)
-                        end
+                task.wait(5)
+                if State.AutoFusePotions then
+                    local request, any = {}, false
+                    for name, selected in pairs(State.FusePotions) do
+                        local getter = selected and DataController.Inventory[name]
+                        local data = getter and getter()
+                        local sets = math.floor((data and tonumber(data.amount) or 0) / FuseUtil.FUSE_COST)
+                        if sets >= 1 and FuseUtil.GetNextTier(name) then request[name], any = sets, true end
                     end
+                    if any then atZone("PotionFusing", function() FuseRF:InvokeServer(request) end) end
                 end
             end
         end)
@@ -3215,7 +3088,7 @@ local function loadConfigFile(configName)
             end
         end
         if opt.DropTargetGrade then
-            local targetLabel = ({["神"] = "God", ["∞"] = "Infinity"})[State.TargetGrade] or State.TargetGrade
+            local targetLabel = ({["神"] = "God", ["∞"] = "Infinity", ["Ω"] = "Omega"})[State.TargetGrade] or State.TargetGrade
             opt.DropTargetGrade:SetValue(targetLabel)
         end
         if opt.SlideGradeDelay then opt.SlideGradeDelay:SetValue(State.GradeRollDelay) end
@@ -3259,17 +3132,11 @@ local function loadConfigFile(configName)
         end
         if opt.TogAutoRerollQuirk then opt.TogAutoRerollQuirk:SetValue(State.AutoRerollQuirk) end
 
-        -- Event Tab
-        if opt.TogEventPumpkin then opt.TogEventPumpkin:SetValue(State.EventPumpkinRoll) end
-        if opt.TogEventPumpkinMulti then opt.TogEventPumpkinMulti:SetValue(State.EventPumpkinMulti) end
-        if opt.DropEventWing then opt.DropEventWing:SetValue(State.EventHouseWing) end
-        if opt.TogEventTreat then opt.TogEventTreat:SetValue(State.EventTrickOrTreat) end
-        if opt.TogEventQuests then opt.TogEventQuests:SetValue(State.EventQuests) end
-        if opt.TogEventPass then opt.TogEventPass:SetValue(State.EventPass) end
-        if opt.DropEventShop then opt.DropEventShop:SetValue(State.EventShopItems) end
-        if opt.TogEventShop then opt.TogEventShop:SetValue(State.EventShopAuto) end
-        if opt.DropEventUpgrades then opt.DropEventUpgrades:SetValue(State.EventUpgradePicks) end
-        if opt.TogEventUpgrades then opt.TogEventUpgrades:SetValue(State.EventUpgradesAuto) end
+        -- Awakening and Potion Fusing
+        if opt.DropAwakenUnits then opt.DropAwakenUnits:SetValue(State.AwakenUnits) end
+        if opt.TogAutoAwaken then opt.TogAutoAwaken:SetValue(State.AutoAwaken) end
+        if opt.DropFusePotions then opt.DropFusePotions:SetValue(State.FusePotions) end
+        if opt.TogAutoFusePotions then opt.TogAutoFusePotions:SetValue(State.AutoFusePotions) end
 
         -- Upgrades Tab
         if opt.TogAutoUpgrades then opt.TogAutoUpgrades:SetValue(State.AutoUpgrades) end
