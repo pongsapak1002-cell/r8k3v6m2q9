@@ -2012,6 +2012,7 @@ local Tabs = {
     Player = Window:AddTab({ Title = "Player" }),
     Shop = Window:AddTab({ Title = "Shop" }),
     Misc = Window:AddTab({ Title = "Misc" }),
+    Teleport = Window:AddTab({ Title = "Teleport" }),
     Settings = Window:AddTab({ Title = "Settings" }),
 }
 local Main = Tabs.Main:AddSection("Auto Farm")
@@ -2392,7 +2393,12 @@ local OWNED = {
 local function isOwned(item)
     local check = OWNED[item]
     local ok, owned = pcall(check or function() return false end, LocalPlayer.PlayerStats)
-    return ok and owned
+    if ok and owned then return true end
+    -- สไตล์หมัดที่ซื้อแล้วอยู่ใน PlayerStats.Bought = {"DarkLeg":true,"WaterStyle":true,...} (รวมของทะเล 2 เช่น Electro)
+    local okB, bought = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(LocalPlayer.PlayerStats.Bought.Value)
+    end)
+    return okB and type(bought) == "table" and bought[item] == true
 end
 
 local function clickGui(button)
@@ -2477,6 +2483,157 @@ ShopFix:AddButton({
     Description = "Fix a frozen shop box.",
     Callback = unstuck,
 })
+
+-- ปลดทะเล 2 (ทดสอบแล้ว): มี Material "Map" -> คุย Traveler กด Accept (รับเควส "Second Sea Map")
+-- -> คุยอีกรอบกด Accept (ส่ง Map) -> PlayerStats.SecondSeaProgression = "Yes" จากนั้นไปคุย Elite Pirate เพื่อข้ามทะเล
+-- คุยซ้ำทันทีหลังปิดกล่อง เซิร์ฟตอบ "Cancel NPCTalk" ต้องรอ ~4 วิ
+local function talkAccept(npc)
+    for _ = 1, 4 do
+        unstuck()
+        task.wait(0.2)
+        GameG.NPCTalk = true
+        local ok, res = pcall(function() return ReplicatedStorage.Chest.Remotes.Functions.CheckQuest:InvokeServer(npc) end)
+        if ok and res ~= "Cancel NPCTalk" then break end
+        task.wait(4)
+    end
+    local box, accept, t0 = nil, nil, os.clock()
+    repeat
+        task.wait(0.05)
+        box = LocalPlayer.PlayerGui:FindFirstChild(npc.Name)
+        accept = box and box:FindFirstChild("Dialogue") and box.Dialogue:FindFirstChild("Accept")
+    until (accept and accept.Visible) or os.clock() - t0 > 6
+    if accept and accept.Visible then
+        task.wait(0.4) -- รอข้อความ/ปุ่มขึ้นครบก่อนคลิก
+        local gui = VaderUI.GUI
+        if gui then gui.Enabled = false end
+        clickGui(accept)
+        task.wait(2)
+        if gui then gui.Enabled = true end
+    end
+    if box and box:FindFirstChild("DelGui") then pcall(function() box.DelGui:FireServer() end) end
+    unstuck()
+end
+
+local function seaUnlocked()
+    local v = LocalPlayer.PlayerStats:FindFirstChild("SecondSeaProgression")
+    return not v or v.Value ~= "No"
+end
+local function hasMap()
+    local ok, mats = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(LocalPlayer.PlayerStats.Material.Value)
+    end)
+    return ok and type(mats) == "table" and (tonumber(mats.Map) or 0) > 0
+end
+
+local function unlockSecondSea()
+    local traveler = workspace.AllNPC:FindFirstChild("Traveler")
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not traveler or not root or shopBusy then return end
+    shopBusy = true
+    -- พักทุกอย่างที่ดึงตัว/เปลี่ยนเควส ไม่งั้นเควสบอสทับเควส Second Sea Map ระหว่างคุย
+    local farm, boss, daily = State.AutoFarm, State.AutoBoss, State.AutoDaily
+    if farm then VaderUI.Options.AutoFarm:SetValue(false) end
+    State.AutoBoss, State.AutoDaily, State.Collecting = false, false, true
+    local back = root.CFrame
+    pcall(function()
+        for _ = 1, 3 do
+            if seaUnlocked() then break end
+            local pos = (traveler.CFrame * CFrame.new(0, 0, -5)).Position
+            root.CFrame = CFrame.lookAt(pos, Vector3.new(traveler.Position.X, pos.Y, traveler.Position.Z))
+            root.AssemblyLinearVelocity = Vector3.zero
+            task.wait(0.3)
+            talkAccept(traveler)
+        end
+    end)
+    State.AutoBoss, State.AutoDaily, State.Collecting = boss, daily, false
+    if root.Parent then root.CFrame = back end
+    if farm then VaderUI.Options.AutoFarm:SetValue(true) end
+    shopBusy = false
+    notify(seaUnlocked() and "Second Sea unlocked! Talk to Elite Pirate to travel" or "Second Sea unlock failed")
+end
+
+local SeaSection = Tabs.Misc:AddSection("Sea")
+SeaSection:AddToggle("AutoUnlockSea", {
+    Title = "Auto Unlock Second Sea",
+    Default = false,
+    Callback = function(value) State.AutoUnlockSea = value end,
+})
+local unlockRetryAt = 0
+task.spawn(function()
+    while not closed and Env.VaderMapStarter == VaderUI do
+        if State.AutoUnlockSea and os.clock() >= unlockRetryAt and not seaUnlocked() and hasMap() then
+            unlockSecondSea()
+            if not seaUnlocked() then unlockRetryAt = os.clock() + 600 end -- เลเวลไม่ถึง/โดนปฏิเสธ พัก 10 นาที
+        end
+        task.wait(10)
+    end
+end)
+
+-- เกาะ = Model ใน workspace.Island (ชื่อแบบ "A - Starter Island") ตัดของที่ไม่ใช่เกาะออก
+local NOT_ISLANDS = { EnchantCutscene = true, ["Gacha Background"] = true, Board = true, AwakeFruitCount = true, ["Mirror Room"] = true }
+local function islandName(model) return (model.Name:gsub("^%S %- ", ""):gsub("^%+ ", "")) end
+local islands = {}
+for _, m in ipairs(workspace:FindFirstChild("Island") and workspace.Island:GetChildren() or {}) do
+    if m:IsA("Model") and not NOT_ISLANDS[m.Name] then table.insert(islands, m) end
+end
+table.sort(islands, function(a, b) return a.Name < b.Name end)
+assert(islandName({ Name = "A - Starter Island" }) == "Starter Island" and islandName({ Name = "+ Stone Rain Sea" }) == "Stone Rain Sea", "islandName self-check failed")
+
+local function pauseFarm()
+    if State.AutoFarm then
+        VaderUI.Options.AutoFarm:SetValue(false) -- ไม่งั้น Auto Farm ดึงตัวกลับไปหามอน
+        notify("Auto Farm paused for teleport")
+    end
+end
+
+local function teleportIsland(model)
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root or not model.Parent then return end
+    pauseFarm()
+    local p = model:GetPivot().Position
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Include
+    params.FilterDescendantsInstances = { model }
+    -- ตรงกลางบางเกาะเป็นช่องว่าง (Skull Island) ยิงรอบๆ ห่างออกไปจนเจอพื้น
+    local hit
+    for _, r in ipairs({ 0, 40, 80, 150 }) do
+        for _, d in ipairs({ Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis }) do
+            hit = workspace:Raycast(p + d * r + Vector3.new(0, 1500, 0), Vector3.new(0, -3000, 0), params)
+            if hit then break end
+        end
+        if hit then break end
+    end
+    root.CFrame = CFrame.new((hit and hit.Position or p) + Vector3.new(0, 5, 0))
+    root.AssemblyLinearVelocity = Vector3.zero
+end
+
+-- ข้ามทะเล: คุย Elite Pirate แล้วกด Accept (ทดสอบแล้ว ทั้งสองทะเลใช้ NPC ชื่อเดียวกัน
+-- ทะเล 1 ถาม "go Second Sea?" ทะเล 2 ถาม "go FirstSea?")
+local SEA_PLACE = { [1] = 4520749081, [2] = 6381829480 }
+local function travelSea(sea)
+    if game.PlaceId == SEA_PLACE[sea] then return notify("Already in this sea") end
+    local npc = workspace.AllNPC:FindFirstChild("Elite Pirate")
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not npc then return notify("Elite Pirate not found") end
+    if not root or shopBusy then return end
+    if sea == 2 and not seaUnlocked() then return notify("Second Sea is locked") end
+    pauseFarm()
+    shopBusy = true
+    local pos = (npc.CFrame * CFrame.new(0, 0, -5)).Position
+    root.CFrame = CFrame.lookAt(pos, Vector3.new(npc.Position.X, pos.Y, npc.Position.Z))
+    root.AssemblyLinearVelocity = Vector3.zero
+    task.wait(0.3)
+    pcall(talkAccept, npc)
+    shopBusy = false
+end
+
+local SeaTravel = Tabs.Teleport:AddSection("Sea")
+SeaTravel:AddButton({ Title = "Teleport to First Sea", Callback = function() task.spawn(travelSea, 1) end })
+SeaTravel:AddButton({ Title = "Teleport to Second Sea", Callback = function() task.spawn(travelSea, 2) end })
+local IslandSection = Tabs.Teleport:AddSection("Islands")
+for _, m in ipairs(islands) do
+    IslandSection:AddButton({ Title = islandName(m), Callback = function() teleportIsland(m) end })
+end
 
 local Settings = Tabs.Settings:AddSection("Theme Settings")
 Settings:AddDropdown("Theme", {
