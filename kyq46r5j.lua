@@ -1830,12 +1830,13 @@ local function getCurrentQuest()
 end
 
 -- เลือกเควสเลเวลสูงสุดที่ไม่เกินเลเวลผู้เล่น (ไม่เอาเควสรายวัน/ครั้งเดียว/Find/บอส "Kill 1 ...")
-local function findOptimalQuest(quests, playerLevel)
+-- seen = ชื่อมอนที่มีในเซิร์ฟนี้ (กันรับเควสของโลกอื่น) ถ้าเป็น nil ไม่กรอง
+local function findOptimalQuest(quests, playerLevel, seen)
     local bestName, bestLevel
     for name, data in pairs(quests) do
         if type(data) == "table" and type(data.Level) == "number" and data.Level <= playerLevel
             and not data.DailyQuest and not data.OneTimeQuest and not tostring(name):find("Find ")
-            and not tostring(name):find("^Kill 1 ") then
+            and not tostring(name):find("^Kill 1 ") and (not seen or seen[data.Mob]) then
             if not bestLevel or data.Level > bestLevel then
                 bestName, bestLevel = name, data.Level
             end
@@ -1850,6 +1851,9 @@ do -- self-check
         ["Kill 1 Boss"] = { Level = 58 },
     }, 60)
     assert(name == "B", "findOptimalQuest self-check failed")
+    -- C อยู่โลกอื่น (มอนไม่มีในเซิร์ฟ) ต้องได้ B แทน
+    name = findOptimalQuest({ B = { Level = 50, Mob = "b" }, C = { Level = 90, Mob = "c" } }, 100, { b = true })
+    assert(name == "B", "findOptimalQuest world filter self-check failed")
 end
 
 local function acceptQuest(name)
@@ -1945,12 +1949,26 @@ local function pickDaily(level)
     return best, best and Game.QuestManager[best].Level
 end
 
+-- มอนที่เคยเห็นใน workspace.Monster ของเซิร์ฟนี้ = มอนของโลกที่อยู่ (QuestManager มีเควสทุกโลกรวมกัน)
+-- shortcut: นับเฉพาะมอนที่เคยโผล่ ถ้าเกมเปิด StreamingEnabled แล้วมอนไกลๆ ไม่โหลด อาจข้ามเควสที่สูงกว่าไป จนกว่าจะเห็นมอนนั้น
+local seenMobs = {}
+local function refreshSeenMobs()
+    local monsters = workspace:FindFirstChild("Monster")
+    if not monsters then return end
+    for _, folder in ipairs(monsters:GetChildren()) do
+        for _, mob in ipairs(folder:GetChildren()) do seenMobs[mob.Name] = true end
+    end
+end
+
 local function pickQuest(level)
     local boss, bossLevel = pickBoss(level)
     if boss then return boss, bossLevel end
     local daily, dailyLevel = pickDaily(level)
     if daily then return daily, dailyLevel end
-    if State.Enabled then return findOptimalQuest(Game.QuestManager, level) end
+    if State.Enabled then
+        refreshSeenMobs()
+        return findOptimalQuest(Game.QuestManager, level, next(seenMobs) and seenMobs or nil)
+    end
 end
 
 -- คืนข้อความสถานะ เอาไว้โชว์ใน UI
