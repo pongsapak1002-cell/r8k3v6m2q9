@@ -2063,6 +2063,9 @@ local function getQuestMob()
     return type(data) == "table" and data.Mob or nil
 end
 
+-- มอนที่กำลังจะหายถูกย้ายลงไป y -1000000 ทั้งที่ Health ยัง > 0 ถ้าลอยตามไปตัวตกโลกตาย (เจอใน log ตอนตายบ่อย)
+local VOID_Y = -400
+
 -- หามอนชื่อนี้ที่ยังไม่ตายและอยู่ใกล้ที่สุด (workspace.Monster.Mon / Boss)
 local function findMob(mobName, root)
     local monsters = workspace:FindFirstChild("Monster")
@@ -2072,7 +2075,7 @@ local function findMob(mobName, root)
         for _, mob in ipairs(folder:GetChildren()) do
             local hum = mob.Name == mobName and mob:FindFirstChildOfClass("Humanoid")
             local hrp = hum and hum.Health > 0 and mob:FindFirstChild("HumanoidRootPart")
-            if hrp then
+            if hrp and hrp.Position.Y > VOID_Y then
                 local dist = (hrp.Position - root.Position).Magnitude
                 if not bestDist or dist < bestDist then best, bestDist = hrp, dist end
             end
@@ -2083,30 +2086,31 @@ end
 
 -- ลอยเหนือหัวมอนกี่ studs: ทดสอบกับ Fighter Fishman แล้ว 5-7 โดนตีสวน, 9 ตีเข้าไม่โดนตี, 10+ ตีไม่ถึง
 State.FloatHeight = 9
+State.FarmPosition = "Behind" -- ทดสอบแล้ว: ลอยเหนือหัวตาย 4 ครั้ง/2 นาที, ยืนข้างหลังไม่โดนส่งลง void เลย
 local farmTarget -- HumanoidRootPart ของมอนที่ล็อคไว้ ตีจนตายค่อยเปลี่ยนตัว
 
 local function isAlive(hrp, mobName)
     local mob = hrp and hrp.Parent
     local hum = mob and mob.Name == mobName and mob:FindFirstChildOfClass("Humanoid")
-    return hum and hum.Health > 0
+    return hum and hum.Health > 0 and hrp.Position.Y > VOID_Y
 end
 
 -- ดันเจี้ยน (ทดสอบแล้ว): อยู่เซิร์ฟเดิมแต่โดนวาปไปไกล (~20000) มี PlayerGui.DungeonUI ระหว่างเล่น
 -- ศัตรูอยู่ใน workspace.MOB (ไม่ใช่ workspace.Monster)
 local function inDungeon() return LocalPlayer.PlayerGui:FindFirstChild("DungeonUI") ~= nil end
--- State.KrakenFight = ช่วงตี Kraken Tentacle ตอนปลดโลก 3 ใช้ระบบตีเดียวกับดันเจี้ยน
-local function dungeonActive() return (State.AutoDungeon and inDungeon()) or State.KrakenFight == true end
+-- State.SpecialMob = pattern ชื่อมอนที่ต้องไล่ตีนอกดันเจี้ยน (Kraken Tentacle / Sea King) ใช้ระบบตีเดียวกับดันเจี้ยน
+local function dungeonActive() return (State.AutoDungeon and inDungeon()) or State.SpecialMob ~= nil end
 local function findDungeonMob(root)
-    -- shortcut: ยังไม่เคยเห็น Tentacle จริง เลยหาชื่อที่มี "Tentacle" ในทุกโฟลเดอร์มอน ถ้าไม่เจอให้เช็คชื่อโฟลเดอร์ตอนเลเวลถึง
-    local folders = State.KrakenFight and { workspace:FindFirstChild("Monster"), workspace:FindFirstChild("SeaMonster"), workspace:FindFirstChild("MOB") }
+    local special = State.SpecialMob
+    local folders = special and { workspace:FindFirstChild("Monster"), workspace:FindFirstChild("SeaMonster"), workspace:FindFirstChild("MOB") }
         or { workspace:FindFirstChild("MOB") }
     local mobs = {}
     for _, f in pairs(folders) do for _, m in ipairs(f:GetDescendants()) do if m:IsA("Model") then table.insert(mobs, m) end end end
     local best, bestDist
     for _, mob in ipairs(mobs) do
         local hum = mob:FindFirstChildOfClass("Humanoid")
-        local hrp = hum and hum.Health > 0 and mob:FindFirstChild("HumanoidRootPart")
-        if State.KrakenFight and not mob.Name:find("Tentacle") then hrp = nil end
+        local hrp = hum and hum.Health > 0 and (mob:FindFirstChild("HumanoidRootPart") or (special and mob.PrimaryPart))
+        if (special and not mob.Name:find(special)) or (hrp and hrp.Position.Y < VOID_Y) then hrp = nil end
         if hrp then
             -- Gunner ยิงไกลแรงสุด ฆ่าก่อน (บวกระยะหลอกให้ตัวอื่นอยู่ท้ายคิว)
             local dist = (hrp.Position - root.Position).Magnitude + (mob.Name:find("Gunner") and 0 or 1e6)
@@ -2119,6 +2123,13 @@ end
 local waitSpot -- ตำแหน่งมอนตัวล่าสุดของเควส ใช้ลอยรอตอนมอนยังไม่เกิด
 -- ทุกเฟรม: ล็อคตัวลอยเหนือหัวมอนแล้วหันหน้าลงหามอน (ทำทุกเฟรมตัวจะได้ไม่ตก/ไม่กระตุก)
 track(game:GetService("RunService").Heartbeat:Connect(function()
+    -- State.HoldCF: ล็อคตัวไว้ทุกเฟรม (เช่นตอนตัดไม้) ตั้งทีละ 0.1 วิแล้วตัวตกสลับวาปเลยกระตุก
+    local hold = State.HoldCF
+    if hold then
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then root.CFrame = hold root.AssemblyLinearVelocity = Vector3.zero end
+        return
+    end
     if dungeonActive() then
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -2126,8 +2137,8 @@ track(game:GetService("RunService").Heartbeat:Connect(function()
         if not root or not hum or hum.Health <= 0 then return end
         -- ไม่ถอยหนีตอนเลือดต่ำ: ทดสอบแล้วลอยสูง 1000 ยังโดน Gunner ยิง 1440/นัด + Shadowbane ดึงตัวลง ถอยไปก็แค่เสียดาเมจ
         local mobHum = farmTarget and farmTarget.Parent and farmTarget.Parent:FindFirstChildOfClass("Humanoid")
-        if not (mobHum and mobHum.Health > 0 and farmTarget:IsDescendantOf(workspace))
-            or (not State.KrakenFight and not farmTarget.Parent.Name:find("Gunner")) then -- ตีตัวอื่นอยู่แต่ Gunner โผล่ → สลับไป Gunner
+        if not (mobHum and mobHum.Health > 0 and farmTarget:IsDescendantOf(workspace) and farmTarget.Position.Y > VOID_Y)
+            or (not State.SpecialMob and not farmTarget.Parent.Name:find("Gunner")) then -- ตีตัวอื่นอยู่แต่ Gunner โผล่ → สลับไป Gunner
             farmTarget = findDungeonMob(root)
         end
         if farmTarget then
@@ -2155,8 +2166,16 @@ track(game:GetService("RunService").Heartbeat:Connect(function()
         return
     end
     waitSpot = { Mob = mobName, Pos = farmTarget.Position }
-    local pos = farmTarget.Position + Vector3.new(0, State.FloatHeight, 0)
-    root.CFrame = CFrame.lookAt(pos, farmTarget.Position, farmTarget.CFrame.LookVector)
+    -- ลอยเหนือหัวแล้วโดนตีจะโดนส่งลง y -1000000 ตาย (น่าจะเป็นตัวกันโกงของเกม) เลยมีท่ายืนแบบอื่นให้เลือก
+    if State.FarmPosition == "Behind" then
+        root.CFrame = CFrame.lookAt((farmTarget.CFrame * CFrame.new(0, 0, State.FloatHeight * 0.5)).Position, farmTarget.Position)
+    elseif State.FarmPosition == "Below" then
+        local pos = farmTarget.Position - Vector3.new(0, State.FloatHeight, 0)
+        root.CFrame = CFrame.lookAt(pos, farmTarget.Position, farmTarget.CFrame.LookVector)
+    else
+        local pos = farmTarget.Position + Vector3.new(0, State.FloatHeight, 0)
+        root.CFrame = CFrame.lookAt(pos, farmTarget.Position, farmTarget.CFrame.LookVector)
+    end
     root.AssemblyLinearVelocity = Vector3.zero
 end))
 
@@ -2219,6 +2238,10 @@ Main:AddToggle("AutoSkill", {
 Main:AddDropdown("Skills", {
     Title = "Skills", Values = { "Z", "X", "C", "V", "E" }, Default = { "Z", "X", "C" }, Multi = true,
     Callback = function(value) State.Skills = value end,
+})
+Main:AddDropdown("FarmPosition", {
+    Title = "Farm Position", Values = { "Above", "Behind", "Below" }, Default = "Behind", Multi = false,
+    Callback = function(value) State.FarmPosition = value end,
 })
 Main:AddSlider("FloatHeight", {
     Title = "Float Height", Default = 9, Min = 5, Max = 12, Rounding = 0,
@@ -2597,10 +2620,11 @@ local function unlockSecondSea()
     notify(seaUnlocked() and "Second Sea unlocked! Talk to Elite Pirate to travel" or "Second Sea unlock failed")
 end
 
--- โลก 3 (ทดสอบแล้วแค่บทพูด): The Squid ตอบ "You are not ready." ตอน Lv 3658 (ไกด์บอก Lv 4000)
+-- โลก 3 (ทดสอบแล้วแค่บทพูด): The Squid ตอบ "You are not ready." ตอน Lv 3658
+-- Lv 4002: "I need you to defeat Kraken Tentacle." + ปุ่ม Accept (= รับเควส ต้องรับก่อนไปแท่น)
 -- Summon Tentacle (Mystery Altar) ตอบ "You needed Heart of Sea in order to start this quests."
 -- Heart of Sea คราฟที่ Jack Stones: Log 50, Fresh Fish 50, Pile of Bones 10, Sea King's Blood 1, Angellic's Feather 15, Undead's Ooze 10
--- ขั้นตอน: ใช้ Heart of Sea ที่ Summon Tentacle -> ฆ่า Kraken Tentacle 6 ตัว -> คุย The Squid -> ไปโลก 3
+-- ขั้นตอน: รับเควส The Squid -> ใช้ Heart of Sea ที่ Summon Tentacle -> ฆ่า Kraken Tentacle 6 ตัว -> คุย The Squid -> ไปโลก 3
 local THIRD_SEA_LEVEL = 4000
 local HEART_RECIPE = { Log = 50, ["Fresh Fish"] = 50, ["Pile of Bones"] = 10, ["Sea King's Blood"] = 1, ["Angellic's Feather"] = 15, ["Undead's Ooze"] = 10 }
 local function materials()
@@ -2637,32 +2661,130 @@ local function goTalk(npcName)
     return true
 end
 
-local function unlockThirdSea()
-    if shopBusy or game.PlaceId ~= 6381829480 then return end -- ต้องอยู่โลก 2
+-- พักฟาร์ม/บอส/เดลี่ระหว่างทำงานพิเศษ แล้วคืนค่าเดิม
+local function withFarmPaused(fn)
+    if shopBusy then return end
     shopBusy = true
     local farm, boss, daily = State.AutoFarm, State.AutoBoss, State.AutoDaily
     if farm then VaderUI.Options.AutoFarm:SetValue(false) end
     State.AutoBoss, State.AutoDaily, State.Collecting = false, false, true
-    pcall(function()
-        goTalk("Summon Tentacle")
-        -- ตี Tentacle จนหมด (รอเกิดสูงสุด 30 วิ ตีสูงสุด 10 นาที)
-        State.Collecting, State.KrakenFight = false, true
-        local root = LocalPlayer.Character.HumanoidRootPart
-        local t0, seen = os.clock(), false
-        while os.clock() - t0 < 600 do
-            local alive = findDungeonMob(root) ~= nil
-            seen = seen or alive
-            if (seen and not alive) or (not seen and os.clock() - t0 > 30) then break end
-            task.wait(1)
-        end
-        State.KrakenFight, State.Collecting = false, true
-        farmTarget = nil
-        if seen then task.wait(2) goTalk("The Squid") end
-    end)
-    State.KrakenFight = false
+    local ok, err = pcall(fn)
+    if not ok then warn("[Vader] " .. tostring(err)) end
+    State.SpecialMob, farmTarget, State.HoldCF = nil, nil, nil
     State.AutoBoss, State.AutoDaily, State.Collecting = boss, daily, false
     if farm then VaderUI.Options.AutoFarm:SetValue(true) end
     shopBusy = false
+end
+
+-- ไล่ตีมอนชื่อตรง pattern ด้วยระบบตีของดันเจี้ยน จนตายหมด / ไม่เกิดใน waitSpawn วิ / เกิน maxTime
+local function fightSpecial(pattern, waitSpawn, maxTime)
+    State.Collecting, State.SpecialMob = false, pattern
+    local t0, seen = os.clock(), false
+    while os.clock() - t0 < maxTime do
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local alive = root and findDungeonMob(root) ~= nil
+        seen = seen or alive
+        if (seen and not alive) or (not seen and os.clock() - t0 > waitSpawn) then break end
+        task.wait(1)
+    end
+    State.SpecialMob, State.Collecting, farmTarget = nil, true, nil
+    return seen
+end
+
+-- Log (ทดสอบแล้ว): ต้นไม้ติดแท็ก "Tree" ตี M1 ไม่ได้ ต้องใช้สกิล (Electro X ทำลายได้ +1 Log ลำต้นโปร่งใสแล้วเกิดใหม่)
+local function treeTrunk(tree)
+    local low
+    for _, p in ipairs(tree:GetDescendants()) do
+        if p:IsA("BasePart") and (not low or p.Position.Y < low.Position.Y) then low = p end
+    end
+    return low
+end
+local function fireSkill(key, cf)
+    local move = equipWeapon()
+    if not move then return end
+    Game.SkillRemote:InvokeServer(move .. "_" .. key, { Type = "Down", MouseHit = cf })
+    task.wait(0.2)
+    Game.SkillRemote:InvokeServer(move .. "_" .. key, { Type = "Up", MouseHit = cf })
+end
+local function chopLogs(target)
+    local CS = game:GetService("CollectionService")
+    local skip, t0 = {}, os.clock()
+    while State.AutoUnlockThirdSea and (tonumber(materials().Log) or 0) < target and os.clock() - t0 < 900 do
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local tree, trunk, bd
+        for _, t in ipairs(root and CS:GetTagged("Tree") or {}) do
+            if not skip[t] and t:IsDescendantOf(workspace) then
+                local tr = treeTrunk(t)
+                local d = tr and tr.Transparency < 1 and (tr.Position - root.Position).Magnitude
+                if d and (not bd or d < bd) then tree, trunk, bd = t, tr, d end
+            end
+        end
+        if not trunk then task.wait(5) continue end -- ล้มหมด รอเกิดใหม่
+        local keys, i, tt = { "X", "Z", "C", "V" }, 0, os.clock()
+        State.HoldCF = CFrame.lookAt(trunk.Position + Vector3.new(8, 2, 0), trunk.Position)
+        while trunk.Transparency < 1 and os.clock() - tt < 10 and root.Parent do
+            i = i % #keys + 1
+            task.spawn(pcall, fireSkill, keys[i], trunk.CFrame)
+            task.wait(0.6)
+        end
+        if trunk.Transparency < 1 then skip[tree] = true end
+    end
+    State.HoldCF = nil
+end
+
+-- คราฟ (ทดสอบแล้วว่าเรียกได้ ของยังไม่ครบ): คุย Jack Stones กด Accept -> เปิด CraftingUI2
+-- -> CraftMaterial:InvokeServer(ชื่อของ, "CraftingUI2") ตามที่ LocalScript ของ UI เรียก ปิดด้วยการลบ UI + NPCTalk=false
+local function craftHeart()
+    goTalk("Jack Stones")
+    pcall(function() ReplicatedStorage.Chest.Remotes.Functions.CraftMaterial:InvokeServer("Heart of Sea", "CraftingUI2") end)
+    local ui = LocalPlayer.PlayerGui:FindFirstChild("CraftingUI2")
+    if ui then ui:Destroy() end
+    GameG.NPCTalk = false
+end
+
+-- Sea King's Blood: ดรอปจาก Sea King (workspace.SeaMonster เกิดเองในทะเล เช่น HydraSeaKing) ยังไม่เคยตีจริง
+local SEA_KING = "Sea ?King"
+local function seaKingAlive()
+    for _, m in ipairs(workspace:FindFirstChild("SeaMonster") and workspace.SeaMonster:GetChildren() or {}) do
+        local hum = m:FindFirstChildOfClass("Humanoid")
+        if m.Name:find(SEA_KING) and hum and hum.Health > 0 then return true end
+    end
+    return false
+end
+
+-- shortcut: ไกด์บอก Blood ได้จาก Sea King Chest / Hydra Chest ยังไม่เคยเห็นกล่องจริง
+-- เลยเดาว่าโผล่ใน workspace.Chest แล้วลองทั้งแตะ/คลิก/prompt ถ้าไม่ได้ของให้เช็คชื่อกล่องตอนบอสตาย
+local function lootChests(seconds)
+    local t0 = os.clock()
+    while os.clock() - t0 < seconds do
+        local folder = workspace:FindFirstChild("Chest")
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        for _, chest in ipairs(folder and root and folder:GetChildren() or {}) do
+            local part = chest:IsA("BasePart") and chest or chest:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                State.HoldCF = part.CFrame + Vector3.new(0, 3, 0)
+                task.wait(0.3)
+                for _, d in ipairs(chest:GetDescendants()) do
+                    if d:IsA("BasePart") then pcall(firetouchinterest, root, d, 0) pcall(firetouchinterest, root, d, 1) end
+                    if d:IsA("ClickDetector") then pcall(fireclickdetector, d) end
+                    if d:IsA("ProximityPrompt") then pcall(fireproximityprompt, d) end
+                end
+                task.wait(0.5)
+            end
+        end
+        State.HoldCF = nil
+        task.wait(1)
+    end
+end
+
+local function unlockThirdSea()
+    goTalk("The Squid")
+    task.wait(4) -- คุยซ้ำทันทีโดน "Cancel NPCTalk"
+    goTalk("Summon Tentacle")
+    if fightSpecial("Tentacle", 30, 600) then
+        task.wait(2)
+        goTalk("The Squid")
+    end
 end
 
 local SeaSection = Tabs.Misc:AddSection("Sea")
@@ -2692,10 +2814,28 @@ local thirdRetryAt = 0
 task.spawn(function()
     while not closed and Env.VaderMapStarter == VaderUI do
         local miss = thirdSeaMissing()
-        pcall(function() thirdSeaInfo:SetDesc(#miss == 0 and "Ready" or "Need: " .. table.concat(miss, ", ")) end)
-        if State.AutoUnlockThirdSea and #miss == 0 and os.clock() >= thirdRetryAt then
-            unlockThirdSea()
-            thirdRetryAt = os.clock() + 600 -- สำเร็จจะโดนวาปไปโลก 3 อยู่แล้ว ถ้ายังอยู่แปลว่าพลาด พัก 10 นาที
+        -- เกมนับถอยหลัง Sea Monster ตัวถัดไปไว้ที่ workspace attribute (สุ่มได้ Sea King / Hydra / ตัวอื่น)
+        local spawnIn = workspace:GetAttribute("SeaMonsterSpawnText")
+        local desc = #miss == 0 and "Ready" or "Need: " .. table.concat(miss, ", ")
+        if spawnIn and (tonumber(materials()["Sea King's Blood"]) or 0) < 1 then desc ..= "\nSea monster spawns in " .. tostring(spawnIn) end
+        pcall(function() thirdSeaInfo:SetDesc(desc) end)
+        if State.AutoUnlockThirdSea and not shopBusy and game.PlaceId == 6381829480 and os.clock() >= thirdRetryAt
+            and LocalPlayer.PlayerStats.lvl.Value >= THIRD_SEA_LEVEL then
+            local mats = materials()
+            local function has(name, n) return (tonumber(mats[name]) or 0) >= n end
+            local canCraft = true
+            for name, need in pairs(HEART_RECIPE) do canCraft = canCraft and has(name, need) end
+            if has("Heart of Sea", 1) then
+                withFarmPaused(unlockThirdSea)
+                thirdRetryAt = os.clock() + 600 -- สำเร็จจะโดนวาปไปโลก 3 อยู่แล้ว ถ้ายังอยู่แปลว่าพลาด พัก 10 นาที
+            elseif canCraft then
+                withFarmPaused(craftHeart)
+                if (tonumber(materials()["Heart of Sea"]) or 0) < 1 then thirdRetryAt = os.clock() + 60 end
+            elseif not has("Sea King's Blood", 1) and seaKingAlive() then
+                withFarmPaused(function() if fightSpecial(SEA_KING, 10, 900) then lootChests(30) end end)
+            elseif not has("Log", HEART_RECIPE.Log) then
+                withFarmPaused(function() chopLogs(HEART_RECIPE.Log) end)
+            end
         end
         task.wait(5)
     end
