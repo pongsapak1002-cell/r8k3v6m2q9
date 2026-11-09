@@ -295,6 +295,18 @@ local State = {
     AutoFusePotions = false,
     FusePotions = {},
 
+    -- Autumn event
+    EventLeafDice = false,
+    EventLeafMulti = false,
+    EventApples = false,
+    EventBoard = false,
+    EventBoardPicks = {},
+    EventTree = false,
+    EventShop = false,
+    EventShopPicks = {},
+    EventQuests = false,
+    EventTowerSection = "Harvest Fields",
+
     -- Rebirth points
     AutoRebirthStats = false,
     RebirthStatPicks = {},
@@ -1605,12 +1617,27 @@ if ((getgenv and getgenv()) or _G).TH == true and VaderUI.GUI then
         ["Uses spare copies and cash."] = "ใช้ตัวซ้ำและเงิน",
         ["Potion Fusing"] = "รวมยา", ["Potions"] = "ยา", ["Auto Fuse Potions"] = "รวมยาอัตโนมัติ",
         ["Fuses every full set."] = "รวมทุกชุดที่ครบ",
+        -- Event
+        ["Event"] = "อีเวนต์", ["No Event"] = "ไม่มีอีเวนต์", ["No event is running."] = "ตอนนี้ไม่มีอีเวนต์",
+        ["Leaf Dice"] = "ลูกเต๋าใบไม้", ["Auto Leaf Dice"] = "ทอยลูกเต๋าใบไม้อัตโนมัติ",
+        ["Several dice per roll."] = "ทอยหลายลูกต่อครั้ง", ["Game sells these on roll."] = "เกมขายตัวที่เลือกทันทีที่ทอยได้",
+        ["Apples"] = "แอปเปิล", ["Auto Collect Apples"] = "เก็บแอปเปิลอัตโนมัติ", ["Picks apples in the orchard."] = "เก็บแอปเปิลในสวน",
+        ["Apple Board"] = "บอร์ดแอปเปิล", ["Upgrades to buy."] = "อัปเกรดที่จะซื้อ", ["Auto Apple Board"] = "อัปบอร์ดแอปเปิลอัตโนมัติ",
+        ["Cheapest first."] = "ซื้ออันถูกสุดก่อน", ["Auto Apple Tree"] = "อัปต้นแอปเปิลอัตโนมัติ",
+        ["Buys every branch, cheapest first."] = "ซื้อทุกกิ่ง ถูกสุดก่อน", ["Apple Shop"] = "ร้านแอปเปิล",
+        ["Items to buy."] = "ของที่จะซื้อ", ["Auto Apple Shop"] = "ซื้อของร้านแอปเปิลอัตโนมัติ",
+        ["Respects daily limits."] = "ไม่เกินลิมิตรายวัน", ["Auto Event Quests"] = "รับเควสอีเวนต์อัตโนมัติ",
+        ["Daily, hourly and bonus."] = "รายวัน รายชั่วโมง และโบนัส", ["Leaf Tower"] = "หอคอยใบไม้", ["Tower"] = "หอคอย",
+        ["Farms Leaves."] = "ฟาร์มใบไม้", ["Auto Leaf Tower"] = "ฟาร์มหอคอยใบไม้อัตโนมัติ", ["Uses Auto Tower."] = "ใช้ Auto Tower",
+        ["Teleport"] = "วาร์ป", ["Go to Event"] = "ไปโลกอีเวนต์", ["Autumn world."] = "โลกฤดูใบไม้ร่วง",
+        ["Back to Hub"] = "กลับจุดเกิด", ["Main area."] = "พื้นที่หลัก",
         ["Rebirth Stats"] = "แต้มรีเบิร์ธ", ["Stats"] = "สเตตัส", ["Points go to these."] = "ลงแต้มที่สเตตัสเหล่านี้",
         ["Auto Rebirth Stats"] = "ลงแต้มรีเบิร์ธอัตโนมัติ", ["Spend points evenly."] = "ลงแต้มเท่า ๆ กัน",
     }
     -- Labels built from data keep their variable part.
     local patterns = {
         {"^Lock Grade (.+)$", "ล็อกเกรด %1"}, {"^(%d+) make 1 higher tier%.$", "%1 ขวดรวมเป็นขั้นสูงขึ้น 1 ขวด"},
+        {"^(%d+) Leaves per roll%.$", "ใช้ %1 ใบไม้ต่อครั้ง"}, {"^Roll (%d+)x$", "ทอย %1 ลูก"},
         {"^Lock Trait (.+)$", "ล็อกเทรต %1"}, {"^Lock Quirk (.+)$", "ล็อกเควิร์ก %1"},
         {"^Current grade is locked: (.+)$", "เกรดปัจจุบันถูกล็อก: %1"},
         {"^Current trait is locked: (.+)$", "เทรตปัจจุบันถูกล็อก: %1"},
@@ -1639,6 +1666,7 @@ end
 -- Tabs
 local Tabs = {
     Main     = Window:AddTab({Title = "Main"}),
+    Event    = Window:AddTab({Title = "Event"}),
     Items    = Window:AddTab({Title = "Items & Boosts"}),
     Tower    = Window:AddTab({Title = "Towers"}),
     Plot     = Window:AddTab({Title = "Plots"}),
@@ -2602,6 +2630,289 @@ do
     end
 end
 
+-- Autumn event. Every action only counts while standing in its zone, so one worker
+-- visits the zones in turn instead of several loops fighting over the character.
+do
+    local A = RS.Framework.Features:FindFirstChild("Autumn")
+    local function find(...)
+        local cur = network
+        for _, name in ipairs({...}) do cur = cur and cur:FindFirstChild(name) end
+        return cur
+    end
+    local function req(name)
+        local ok, m = pcall(function() return require(A[name]) end)
+        return ok and m or nil
+    end
+    local Cfg = A and req("AutumnConfig")
+    if not (Cfg and Cfg.ACTIVE) then
+        Tabs.Event:AddSection("Event"):AddParagraph({Title="No Event", Content="No event is running."})
+    else
+        local Ev = {
+            TravelRF = find("AutumnService", "RF", "Travel"),
+            LeafRollRF = find("LeafDiceService", "RF", "Roll"),
+            LeafSellRF = find("LeafDiceService", "RF", "SetAutoSell"),
+            SyncRF = find("AppleService", "RF", "Sync"),
+            CollectRF = find("AppleService", "RF", "Collect"),
+            BoardRF = find("AppleService", "RF", "BuyUpgrade"),
+            TreeRF = find("AppleTreeService", "RF", "BuyAppleUpgrade"),
+            ShopRF = find("AppleShopService", "RF", "Buy"),
+            ClaimRF = find("AutumnQuestService", "RF", "Claim"),
+            BonusRF = find("AutumnQuestService", "RF", "ClaimBonus"),
+            Leaf = req("LeafDice"), Apple = req("AppleConfig"), Tree = req("AppleTree"),
+            Shop = req("AppleShopConfig"), Quests = req("AutumnQuestConfig"), Towers = req("TurkeyTowers"),
+        }
+        local Zones = Cfg.Zones
+        local function amount(item)
+            local getter = DataController.Inventory and DataController.Inventory[item]
+            local data = getter and getter()
+            return data and tonumber(data.amount) or 0
+        end
+        local function zonePart(name)
+            local zones = workspace:FindFirstChild("Zones")
+            return zones and zones:FindFirstChild(name)
+        end
+        -- Stand inside a zone; travel to the event world first when it is far away.
+        local function goZone(name)
+            local zone, character = zonePart(name), LP.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if not (zone and zone:IsA("BasePart") and root) then return false end
+            if (root.Position - zone.Position).Magnitude > 1500 and Ev.TravelRF then
+                pcall(function() Ev.TravelRF:InvokeServer("Autumn") end)
+                task.wait(1.5)
+            end
+            local offset = zone.Position - root.Position
+            if Vector3.new(offset.X, 0, offset.Z).Magnitude > math.min(zone.Size.X, zone.Size.Z) / 2 then
+                character:PivotTo(zone.CFrame)
+                task.wait(0.4) -- let the server see the new position
+            end
+            return true
+        end
+
+        -- Leaf Dice
+        if Ev.LeafRollRF and Ev.Leaf then
+            local sec = Tabs.Event:AddSection("Leaf Dice")
+            sec:AddToggle("TogEventLeaf", {Title="Auto Leaf Dice", Description=Ev.Leaf.COST .. " Leaves per roll.",
+                Default=false, Callback=function(v) State.EventLeafDice = v end})
+            sec:AddToggle("TogEventLeafMulti", {Title="Roll " .. Ev.Leaf.MULTI .. "x", Description="Several dice per roll.",
+                Default=false, Callback=function(v) State.EventLeafMulti = v end})
+            if Ev.LeafSellRF then
+                local names, sold = {}, {}
+                local saved = {}
+                pcall(function() saved = DataController.Autumn().LeafAutoSell or {} end)
+                for _, unit in ipairs(Ev.Leaf.Pool.Units) do
+                    table.insert(names, unit.id)
+                    sold[unit.id] = saved[unit.id] == true or nil
+                end
+                sec:AddDropdown("DropEventLeafSell", {Title="Auto Sell", Description="Game sells these on roll.",
+                    Values=names, Multi=true, Default=sold,
+                    Callback=function(selected)
+                        task.spawn(function()
+                            for _, name in ipairs(names) do
+                                local want = selected[name] == true
+                                if (sold[name] == true) ~= want then
+                                    sold[name] = want or nil
+                                    pcall(function() Ev.LeafSellRF:InvokeServer(name, want) end)
+                                    task.wait(0.25) -- server debounce is 0.2s per unit
+                                end
+                            end
+                        end)
+                    end})
+            end
+        end
+
+        -- Apples
+        if Ev.SyncRF and Ev.CollectRF and Ev.Apple then
+            local sec = Tabs.Event:AddSection("Apples")
+            sec:AddToggle("TogEventApples", {Title="Auto Collect Apples", Description="Picks apples in the orchard.",
+                Default=false, Callback=function(v) State.EventApples = v end})
+            if Ev.BoardRF then
+                local names = {}
+                for _, upgrade in ipairs(Ev.Apple.Upgrades) do table.insert(names, upgrade.name) end
+                sec:AddDropdown("DropEventBoard", {Title="Apple Board", Description="Upgrades to buy.", Values=names,
+                    Multi=true, Default=State.EventBoardPicks, Callback=function(v) State.EventBoardPicks = v end})
+                sec:AddToggle("TogEventBoard", {Title="Auto Apple Board", Description="Cheapest first.",
+                    Default=false, Callback=function(v) State.EventBoard = v end})
+            end
+            if Ev.TreeRF and Ev.Tree then
+                sec:AddToggle("TogEventTree", {Title="Auto Apple Tree", Description="Buys every branch, cheapest first.",
+                    Default=false, Callback=function(v) State.EventTree = v end})
+            end
+            if Ev.ShopRF and Ev.Shop then
+                local ids = {}
+                for _, offer in ipairs(Ev.Shop.Offers) do table.insert(ids, offer.id) end
+                sec:AddDropdown("DropEventShop", {Title="Apple Shop", Description="Items to buy.", Values=ids,
+                    Multi=true, Default=State.EventShopPicks, Callback=function(v) State.EventShopPicks = v end})
+                sec:AddToggle("TogEventShop", {Title="Auto Apple Shop", Description="Respects daily limits.",
+                    Default=false, Callback=function(v) State.EventShop = v end})
+            end
+        end
+
+        -- Quests
+        if Ev.ClaimRF and Ev.Quests then
+            local sec = Tabs.Event:AddSection("Quests")
+            sec:AddToggle("TogEventQuests", {Title="Auto Event Quests", Description="Daily, hourly and bonus.",
+                Default=false, Callback=function(v) State.EventQuests = v end})
+        end
+
+        -- Leaf Tower: event towers are regular towers, so this drives the Towers tab.
+        if Ev.Towers and Ev.Towers.Sections then
+            local sec = Tabs.Event:AddSection("Leaf Tower")
+            local names = {}
+            for _, section in ipairs(Ev.Towers.Sections) do table.insert(names, section.name) end
+            sec:AddDropdown("DropEventTower", {Title="Tower", Description="Farms Leaves.", Values=names,
+                Default=State.EventTowerSection, Callback=function(v) State.EventTowerSection = v end})
+            sec:AddToggle("TogEventTower", {Title="Auto Leaf Tower", Description="Uses Auto Tower.", Default=false,
+                Callback=function(v)
+                    local opt = VaderUI.Options
+                    if v and opt.DropSelectTower then opt.DropSelectTower:SetValue(State.EventTowerSection) end
+                    if opt.TogAutoTower then opt.TogAutoTower:SetValue(v) end
+                end})
+        end
+
+        if Ev.TravelRF then
+            local sec = Tabs.Event:AddSection("Teleport")
+            sec:AddButton({Title="Go to Event", Description="Autumn world.",
+                Callback=function() pcall(function() Ev.TravelRF:InvokeServer("Autumn") end) end})
+            sec:AddButton({Title="Back to Hub", Description="Main area.",
+                Callback=function() pcall(function() Ev.TravelRF:InvokeServer("Hub") end) end})
+        end
+
+        local function claimQuests()
+            for _, period in ipairs(Ev.Quests.Periods) do
+                local data = DataController[period.dataKey]()
+                if type(data) == "table" and type(data.quests) == "table" then
+                    local progress, claimed = data.progress or {}, data.claimed or {}
+                    local ready, allDone = {}, true
+                    for _, id in ipairs(data.quests) do
+                        local quest = Ev.Quests.GetQuest(id)
+                        if claimed[id] ~= true then
+                            if quest and type(progress[id]) == "number" and progress[id] >= quest.target then
+                                table.insert(ready, id)
+                            else
+                                allDone = false
+                            end
+                        end
+                    end
+                    local bonus = allDone and data.bonusClaimed ~= true and Ev.BonusRF
+                    if #ready > 0 or bonus then
+                        if not goZone(Ev.Quests.ZONE) then return end
+                        for _, id in ipairs(ready) do
+                            Ev.ClaimRF:InvokeServer(id)
+                            task.wait(0.35) -- server debounce is 0.3s
+                        end
+                        if bonus then Ev.BonusRF:InvokeServer(period.id) end
+                    end
+                end
+            end
+        end
+
+        local function buyTree()
+            local owned = DataController.AppleTree() or {}
+            for _ = 1, 5 do
+                local pick, price = nil, math.huge
+                for name, node in pairs(Ev.Tree.Nodes) do
+                    if name ~= Ev.Tree.ROOT and owned[name] ~= true and (node.price or 0) < price then
+                        local parent = Ev.Tree.Structure:GetParent(name)
+                        if parent == Ev.Tree.ROOT or owned[parent] == true then pick, price = name, node.price or 0 end
+                    end
+                end
+                if not pick or amount(Ev.Tree.CURRENCY) < price then return end
+                if not goZone(Ev.Tree.ZONE) then return end
+                if not Ev.TreeRF:InvokeServer(pick) then return end
+                owned[pick] = true
+                task.wait(0.25) -- server debounce is 0.2s
+            end
+        end
+
+        local function buyBoard()
+            local board = DataController.AppleBoard() or {}
+            local pick, cost = nil, math.huge
+            for name, selected in pairs(State.EventBoardPicks) do
+                local upgrade = selected and Ev.Apple.GetUpgrade(name)
+                if upgrade and Ev.Apple.IsUnlocked(upgrade, board) then
+                    local level = Ev.Apple.GetLevel(board, name)
+                    if level < upgrade.max and Ev.Apple.GetCost(upgrade, level) < cost then
+                        pick, cost = name, Ev.Apple.GetCost(upgrade, level)
+                    end
+                end
+            end
+            if pick and amount(Cfg.Currencies.Apples) >= cost and goZone(Ev.Apple.AREA_ZONE) then
+                Ev.BoardRF:InvokeServer(pick, false)
+            end
+        end
+
+        local function buyShop()
+            local autumn = DataController.Autumn() or {}
+            local today = Ev.Shop.GetDay(os.time())
+            -- The server resets the limits on the first visit of a new day.
+            local bought = autumn.ShopDay == today and (autumn.ShopPurchases or {}) or {}
+            local tree = DataController.AppleTree() or {}
+            for id, selected in pairs(State.EventShopPicks) do
+                local offer = selected and Ev.Shop.ById[id]
+                local count = offer and (bought[id] or 0) or 0
+                if offer and (not offer.limit or count < offer.limit)
+                    and (not offer.requires or tree[offer.requires.treeNode] == true)
+                    and amount(Ev.Shop.CURRENCY) >= Ev.Shop.GetPrice(offer, count) then
+                    if not goZone(Ev.Shop.ZONE) then return end
+                    Ev.ShopRF:InvokeServer(id)
+                    task.wait(0.25) -- server debounce is 0.2s
+                end
+            end
+        end
+
+        -- The server refills 12 picks per second up to 6 at once, so take nearby apples one by one.
+        local nextSync = 0
+        local function collectApples()
+            if os.clock() < nextSync then return end
+            nextSync = os.clock() + 0.6 -- server sync debounce is 0.5s
+            if not goZone(Ev.Apple.AREA_ZONE) then return end
+            local apples = Ev.SyncRF:InvokeServer()
+            local character = LP.Character
+            if type(apples) ~= "table" or not character then return end
+            local root = character:FindFirstChild("HumanoidRootPart")
+            for _ = 1, 6 do
+                if not (root and State.EventApples and isCurrentRun()) then return end
+                local best, bestIndex, bestDist = nil, nil, math.huge
+                for i, apple in ipairs(apples) do
+                    local d = (apple.position - root.Position).Magnitude
+                    if d < bestDist then best, bestIndex, bestDist = apple, i, d end
+                end
+                if not best then return end
+                table.remove(apples, bestIndex)
+                character:PivotTo(CFrame.new(best.position + Vector3.new(0, 2.5, 0)))
+                task.wait(0.08)
+                Ev.CollectRF:InvokeServer({best.id})
+            end
+        end
+
+        task.spawn(function()
+            local nextLeaf, nextSlow = 0, 0
+            while isCurrentRun() do
+                task.wait(0.2)
+                if Cfg.ACTIVE then
+                    if State.EventLeafDice and Ev.LeafRollRF and Ev.Leaf and os.clock() >= nextLeaf then
+                        local count = State.EventLeafMulti and Ev.Leaf.MULTI or 1
+                        nextLeaf = os.clock() + 5
+                        if amount(Ev.Leaf.CURRENCY) >= Ev.Leaf.COST * count and goZone(Zones.LeafDice) then
+                            local ok, results = pcall(function() return Ev.LeafRollRF:InvokeServer(count) end)
+                            -- nil means refused (full storage or too soon); back off instead of spamming.
+                            if ok and results then nextLeaf = os.clock() + Ev.Leaf.ROLL_DURATION + 0.1 end
+                        end
+                    end
+                    if os.clock() >= nextSlow then
+                        nextSlow = os.clock() + 5
+                        if State.EventQuests and Ev.ClaimRF and Ev.Quests then pcall(claimQuests) end
+                        if State.EventTree and Ev.TreeRF and Ev.Tree then pcall(buyTree) end
+                        if State.EventBoard and Ev.BoardRF and Ev.Apple then pcall(buyBoard) end
+                        if State.EventShop and Ev.ShopRF and Ev.Shop then pcall(buyShop) end
+                    end
+                    if State.EventApples and Ev.SyncRF and Ev.CollectRF and Ev.Apple then pcall(collectApples) end
+                end
+            end
+        end)
+    end
+end
+
 local secUpgrades = Tabs.Upgrades:AddSection("Upgrades")
 
 secUpgrades:AddToggle("TogAutoUpgrades", {
@@ -3131,6 +3442,18 @@ local function loadConfigFile(configName)
             if lock then lock:SetValue(State.ProtectedQuirks[name] == true) end
         end
         if opt.TogAutoRerollQuirk then opt.TogAutoRerollQuirk:SetValue(State.AutoRerollQuirk) end
+
+        -- Event Tab
+        if opt.TogEventLeaf then opt.TogEventLeaf:SetValue(State.EventLeafDice) end
+        if opt.TogEventLeafMulti then opt.TogEventLeafMulti:SetValue(State.EventLeafMulti) end
+        if opt.TogEventApples then opt.TogEventApples:SetValue(State.EventApples) end
+        if opt.DropEventBoard then opt.DropEventBoard:SetValue(State.EventBoardPicks) end
+        if opt.TogEventBoard then opt.TogEventBoard:SetValue(State.EventBoard) end
+        if opt.TogEventTree then opt.TogEventTree:SetValue(State.EventTree) end
+        if opt.DropEventShop then opt.DropEventShop:SetValue(State.EventShopPicks) end
+        if opt.TogEventShop then opt.TogEventShop:SetValue(State.EventShop) end
+        if opt.TogEventQuests then opt.TogEventQuests:SetValue(State.EventQuests) end
+        if opt.DropEventTower then opt.DropEventTower:SetValue(State.EventTowerSection) end
 
         -- Awakening and Potion Fusing
         if opt.DropAwakenUnits then opt.DropAwakenUnits:SetValue(State.AwakenUnits) end
