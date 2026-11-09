@@ -2013,6 +2013,7 @@ local Tabs = {
     Shop = Window:AddTab({ Title = "Shop" }),
     Misc = Window:AddTab({ Title = "Misc" }),
     Teleport = Window:AddTab({ Title = "Teleport" }),
+    Dungeon = Window:AddTab({ Title = "Dungeon" }),
     Settings = Window:AddTab({ Title = "Settings" }),
 }
 local Main = Tabs.Main:AddSection("Auto Farm")
@@ -2090,9 +2091,52 @@ local function isAlive(hrp, mobName)
     return hum and hum.Health > 0
 end
 
+-- ดันเจี้ยน (ทดสอบแล้ว): อยู่เซิร์ฟเดิมแต่โดนวาปไปไกล (~20000) มี PlayerGui.DungeonUI ระหว่างเล่น
+-- ศัตรูอยู่ใน workspace.MOB (ไม่ใช่ workspace.Monster)
+local function inDungeon() return LocalPlayer.PlayerGui:FindFirstChild("DungeonUI") ~= nil end
+-- State.KrakenFight = ช่วงตี Kraken Tentacle ตอนปลดโลก 3 ใช้ระบบตีเดียวกับดันเจี้ยน
+local function dungeonActive() return (State.AutoDungeon and inDungeon()) or State.KrakenFight == true end
+local function findDungeonMob(root)
+    -- shortcut: ยังไม่เคยเห็น Tentacle จริง เลยหาชื่อที่มี "Tentacle" ในทุกโฟลเดอร์มอน ถ้าไม่เจอให้เช็คชื่อโฟลเดอร์ตอนเลเวลถึง
+    local folders = State.KrakenFight and { workspace:FindFirstChild("Monster"), workspace:FindFirstChild("SeaMonster"), workspace:FindFirstChild("MOB") }
+        or { workspace:FindFirstChild("MOB") }
+    local mobs = {}
+    for _, f in pairs(folders) do for _, m in ipairs(f:GetDescendants()) do if m:IsA("Model") then table.insert(mobs, m) end end end
+    local best, bestDist
+    for _, mob in ipairs(mobs) do
+        local hum = mob:FindFirstChildOfClass("Humanoid")
+        local hrp = hum and hum.Health > 0 and mob:FindFirstChild("HumanoidRootPart")
+        if State.KrakenFight and not mob.Name:find("Tentacle") then hrp = nil end
+        if hrp then
+            -- Gunner ยิงไกลแรงสุด ฆ่าก่อน (บวกระยะหลอกให้ตัวอื่นอยู่ท้ายคิว)
+            local dist = (hrp.Position - root.Position).Magnitude + (mob.Name:find("Gunner") and 0 or 1e6)
+            if not bestDist or dist < bestDist then best, bestDist = hrp, dist end
+        end
+    end
+    return best
+end
+
 local waitSpot -- ตำแหน่งมอนตัวล่าสุดของเควส ใช้ลอยรอตอนมอนยังไม่เกิด
 -- ทุกเฟรม: ล็อคตัวลอยเหนือหัวมอนแล้วหันหน้าลงหามอน (ทำทุกเฟรมตัวจะได้ไม่ตก/ไม่กระตุก)
 track(game:GetService("RunService").Heartbeat:Connect(function()
+    if dungeonActive() then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then return end
+        -- ไม่ถอยหนีตอนเลือดต่ำ: ทดสอบแล้วลอยสูง 1000 ยังโดน Gunner ยิง 1440/นัด + Shadowbane ดึงตัวลง ถอยไปก็แค่เสียดาเมจ
+        local mobHum = farmTarget and farmTarget.Parent and farmTarget.Parent:FindFirstChildOfClass("Humanoid")
+        if not (mobHum and mobHum.Health > 0 and farmTarget:IsDescendantOf(workspace))
+            or (not State.KrakenFight and not farmTarget.Parent.Name:find("Gunner")) then -- ตีตัวอื่นอยู่แต่ Gunner โผล่ → สลับไป Gunner
+            farmTarget = findDungeonMob(root)
+        end
+        if farmTarget then
+            local pos = farmTarget.Position + Vector3.new(0, State.FloatHeight, 0)
+            root.CFrame = CFrame.lookAt(pos, farmTarget.Position, farmTarget.CFrame.LookVector)
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+        return
+    end
     if State.Collecting then return end -- Misc กำลังวาปไปเก็บของ อย่าดึงตัวกลับ
     if not State.AutoFarm then farmTarget = nil return end
     local char = LocalPlayer.Character
@@ -2185,7 +2229,7 @@ Main:AddSlider("FloatHeight", {
 local skillBusySince = {}
 task.spawn(function()
     while not closed and Env.VaderMapStarter == VaderUI do
-        if State.AutoFarm and State.AutoSkill and farmTarget then
+        if (State.AutoFarm or dungeonActive()) and State.AutoSkill and farmTarget then
             for key, on in pairs(State.Skills) do
                 local since = skillBusySince[key]
                 if on and (not since or os.clock() - since > 5) then
@@ -2205,7 +2249,7 @@ end)
 local attackBusySince
 task.spawn(function()
     while not closed and Env.VaderMapStarter == VaderUI do
-        if State.AutoFarm and farmTarget and (not attackBusySince or os.clock() - attackBusySince > 2) then
+        if (State.AutoFarm or dungeonActive()) and farmTarget and (not attackBusySince or os.clock() - attackBusySince > 2) then
             attackBusySince = os.clock()
             task.spawn(function() pcall(attack) attackBusySince = nil end)
         end
@@ -2266,8 +2310,9 @@ task.spawn(function()
 end)
 task.spawn(function()
     while not closed and Env.VaderMapStarter == VaderUI do
-        if State.AutoArmament then task.spawn(pcall, autoArmament) end
-        if State.AutoObservation then task.spawn(pcall, autoObservation) end
+        -- ในดันเจี้ยนเปิดฮาคิให้เองเสมอ (ชั้น 2 โดน Pirate Gunner ยิงตาย)
+        if State.AutoArmament or dungeonActive() then task.spawn(pcall, autoArmament) end
+        if State.AutoObservation or dungeonActive() then task.spawn(pcall, autoObservation) end
         task.wait(2)
     end
 end)
@@ -2552,6 +2597,74 @@ local function unlockSecondSea()
     notify(seaUnlocked() and "Second Sea unlocked! Talk to Elite Pirate to travel" or "Second Sea unlock failed")
 end
 
+-- โลก 3 (ทดสอบแล้วแค่บทพูด): The Squid ตอบ "You are not ready." ตอน Lv 3658 (ไกด์บอก Lv 4000)
+-- Summon Tentacle (Mystery Altar) ตอบ "You needed Heart of Sea in order to start this quests."
+-- Heart of Sea คราฟที่ Jack Stones: Log 50, Fresh Fish 50, Pile of Bones 10, Sea King's Blood 1, Angellic's Feather 15, Undead's Ooze 10
+-- ขั้นตอน: ใช้ Heart of Sea ที่ Summon Tentacle -> ฆ่า Kraken Tentacle 6 ตัว -> คุย The Squid -> ไปโลก 3
+local THIRD_SEA_LEVEL = 4000
+local HEART_RECIPE = { Log = 50, ["Fresh Fish"] = 50, ["Pile of Bones"] = 10, ["Sea King's Blood"] = 1, ["Angellic's Feather"] = 15, ["Undead's Ooze"] = 10 }
+local function materials()
+    local ok, mats = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(LocalPlayer.PlayerStats.Material.Value)
+    end)
+    return ok and type(mats) == "table" and mats or {}
+end
+local function thirdSeaMissing()
+    local miss = {}
+    local lvl = LocalPlayer.PlayerStats.lvl.Value
+    if lvl < THIRD_SEA_LEVEL then table.insert(miss, ("Level %d/%d"):format(lvl, THIRD_SEA_LEVEL)) end
+    local mats = materials()
+    if (tonumber(mats["Heart of Sea"]) or 0) < 1 then
+        for name, need in pairs(HEART_RECIPE) do
+            local have = tonumber(mats[name]) or 0
+            if have < need then table.insert(miss, ("%s %d/%d"):format(name, have, need)) end
+        end
+        table.sort(miss)
+        table.insert(miss, "Heart of Sea (craft at Jack Stones)")
+    end
+    return miss
+end
+
+local function goTalk(npcName)
+    local npc = workspace.AllNPC:FindFirstChild(npcName)
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not npc or not root then return false end
+    local pos = (npc.CFrame * CFrame.new(0, 0, -5)).Position
+    root.CFrame = CFrame.lookAt(pos, Vector3.new(npc.Position.X, pos.Y, npc.Position.Z))
+    root.AssemblyLinearVelocity = Vector3.zero
+    task.wait(0.3)
+    talkAccept(npc)
+    return true
+end
+
+local function unlockThirdSea()
+    if shopBusy or game.PlaceId ~= 6381829480 then return end -- ต้องอยู่โลก 2
+    shopBusy = true
+    local farm, boss, daily = State.AutoFarm, State.AutoBoss, State.AutoDaily
+    if farm then VaderUI.Options.AutoFarm:SetValue(false) end
+    State.AutoBoss, State.AutoDaily, State.Collecting = false, false, true
+    pcall(function()
+        goTalk("Summon Tentacle")
+        -- ตี Tentacle จนหมด (รอเกิดสูงสุด 30 วิ ตีสูงสุด 10 นาที)
+        State.Collecting, State.KrakenFight = false, true
+        local root = LocalPlayer.Character.HumanoidRootPart
+        local t0, seen = os.clock(), false
+        while os.clock() - t0 < 600 do
+            local alive = findDungeonMob(root) ~= nil
+            seen = seen or alive
+            if (seen and not alive) or (not seen and os.clock() - t0 > 30) then break end
+            task.wait(1)
+        end
+        State.KrakenFight, State.Collecting = false, true
+        farmTarget = nil
+        if seen then task.wait(2) goTalk("The Squid") end
+    end)
+    State.KrakenFight = false
+    State.AutoBoss, State.AutoDaily, State.Collecting = boss, daily, false
+    if farm then VaderUI.Options.AutoFarm:SetValue(true) end
+    shopBusy = false
+end
+
 local SeaSection = Tabs.Misc:AddSection("Sea")
 SeaSection:AddToggle("AutoUnlockSea", {
     Title = "Auto Unlock Second Sea",
@@ -2566,6 +2679,25 @@ task.spawn(function()
             if not seaUnlocked() then unlockRetryAt = os.clock() + 600 end -- เลเวลไม่ถึง/โดนปฏิเสธ พัก 10 นาที
         end
         task.wait(10)
+    end
+end)
+
+SeaSection:AddToggle("AutoUnlockThirdSea", {
+    Title = "Auto Unlock Third Sea",
+    Default = false,
+    Callback = function(value) State.AutoUnlockThirdSea = value end,
+})
+local thirdSeaInfo = SeaSection:AddParagraph({ Title = "Third Sea", Content = "" })
+local thirdRetryAt = 0
+task.spawn(function()
+    while not closed and Env.VaderMapStarter == VaderUI do
+        local miss = thirdSeaMissing()
+        pcall(function() thirdSeaInfo:SetDesc(#miss == 0 and "Ready" or "Need: " .. table.concat(miss, ", ")) end)
+        if State.AutoUnlockThirdSea and #miss == 0 and os.clock() >= thirdRetryAt then
+            unlockThirdSea()
+            thirdRetryAt = os.clock() + 600 -- สำเร็จจะโดนวาปไปโลก 3 อยู่แล้ว ถ้ายังอยู่แปลว่าพลาด พัก 10 นาที
+        end
+        task.wait(5)
     end
 end)
 
@@ -2630,10 +2762,59 @@ end
 local SeaTravel = Tabs.Teleport:AddSection("Sea")
 SeaTravel:AddButton({ Title = "Teleport to First Sea", Callback = function() task.spawn(travelSea, 1) end })
 SeaTravel:AddButton({ Title = "Teleport to Second Sea", Callback = function() task.spawn(travelSea, 2) end })
+-- shortcut: ไปโลก 3 = คุย The Squid ในโลก 2 (ยังไม่ได้ทดสอบหลังปลด) ขากลับจากโลก 3 ยังไม่รู้ว่าคุย NPC ไหน
+SeaTravel:AddButton({ Title = "Teleport to Third Sea", Callback = function()
+    if game.PlaceId ~= 6381829480 then return notify("Go to Second Sea first") end
+    if shopBusy then return end
+    pauseFarm()
+    shopBusy = true
+    task.spawn(function() pcall(goTalk, "The Squid") shopBusy = false end)
+end })
 local IslandSection = Tabs.Teleport:AddSection("Islands")
 for _, m in ipairs(islands) do
     IslandSection:AddButton({ Title = islandName(m), Callback = function() teleportIsland(m) end })
 end
+
+-- เข้าดันเจี้ยน (ทดสอบแล้ว): ยืนบนแท่น workspace.Dungeon -> ป้ายขึ้น "1/6 (ชื่อเรา)" นับ 20 วิ
+-- -> หน้าโหวต ChooseMap (ไม่โหวตเกมเลือก Easy ให้) -> วาปเข้าดันเจี้ยน
+-- มีคนเล่นอยู่ ป้ายขึ้น "Dungeon in progress. Access temporarily restricted." ต้องรอ
+local function padText(pad)
+    local t = {}
+    for _, v in ipairs(pad:GetDescendants()) do if v:IsA("TextLabel") then table.insert(t, v.Text) end end
+    return table.concat(t, " ")
+end
+local function joinDungeon()
+    local pad = workspace:FindFirstChild("Dungeon")
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not pad or not pad:IsA("BasePart") or not root or shopBusy then return end
+    if padText(pad):find("in progress") then return end
+    State.Collecting = true -- กัน Auto Farm ดึงตัวออกจากแท่นระหว่างนับถอยหลัง
+    local t0 = os.clock()
+    -- นับถอยหลังเริ่มใหม่ทุกครั้งที่มีคนเข้า/ออกแท่น เลยรอนานหน่อย
+    while State.AutoDungeon and not inDungeon() and os.clock() - t0 < 120 do
+        root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local dist = root and (root.Position - pad.Position).Magnitude
+        -- ยังอยู่แมพหลัก (ไม่ใช่โดนเกมวาปไปดันเจี้ยนแล้ว ที่ y ~15900) ก็ดึงกลับขึ้นแท่น
+        if dist and dist > 10 and root.Position.Y < 10000 then
+            root.CFrame = pad.CFrame + Vector3.new(0, 3, 0)
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+        task.wait(0.5)
+    end
+    State.Collecting = false
+end
+
+local DungeonSection = Tabs.Dungeon:AddSection("Dungeon")
+DungeonSection:AddToggle("AutoDungeon", {
+    Title = "Auto Dungeon", Default = false,
+    Callback = function(value) State.AutoDungeon = value end,
+})
+task.spawn(function()
+    while not closed and Env.VaderMapStarter == VaderUI do
+        if State.AutoDungeon and not inDungeon() then pcall(joinDungeon) end
+        task.wait(3)
+    end
+end)
 
 local Settings = Tabs.Settings:AddSection("Theme Settings")
 Settings:AddDropdown("Theme", {
