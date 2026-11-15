@@ -2080,42 +2080,54 @@ track(Players.LocalPlayer.Idled:Connect(function()
         virtualUser:ClickButton2(Vector2.new())
     end)
 end))
--- AfkController ของเกมนับแค่ input จริง (นิ่ง 18 นาที = วาปเซิร์ฟ, พับจอ = Away): เรียก handler InputBegan ของมันเองให้รีเซ็ตเวลา
+-- AfkController ของเกม: นิ่ง 18 นาที = วาปเซิร์ฟใหม่, พับจอ = Away. รีเซ็ตเวลานิ่งผ่าน upvalue ของ checkLoop (วนตลอดเกม ไม่โดน GC)
+-- checkLoop: 1=forcedAfk 2=awaySince 4=lastInput 5=sentAfk | updateRejoin (checkLoop up 9): 2=lastInput 3=robloxIdle
 local UIS = game:GetService("UserInputService")
-local function afkConns(signal)
-    local list = {}
-    pcall(function()
-        for _, c in ipairs(getconnections(signal)) do
-            local f = c.Function
-            if f and tostring(debug.info(f, "s")):find("AfkController") then table.insert(list, c) end
-        end
-    end)
-    return list
-end
-local focusConns = afkConns(UIS.WindowFocusReleased)
+local focusConns = {}
+pcall(function()
+    for _, c in ipairs(getconnections(UIS.WindowFocusReleased)) do
+        local f = c.Function
+        if f and tostring(debug.info(f, "s")):find("AfkController") then table.insert(focusConns, c) end
+    end
+end)
 local function setFocusCheck(on)
     for _, c in ipairs(focusConns) do pcall(function() if on then c:Enable() else c:Disable() end end) end
 end
-task.spawn(function()
-    -- WindowFocused ล้างสถานะ Away ก่อน แล้ว markActive ของเกมรีเซ็ตเวลานิ่ง
-    local focusedConns = afkConns(UIS.WindowFocused)
-    local markActive
-    pcall(function()
-        for _, f in ipairs(getgc(false)) do
-            if type(f) == "function" and islclosure(f) then
-                local source, name = debug.info(f, "sn")
-                if name == "markActive" and tostring(source):find("AfkController") then markActive = f break end
-            end
+local function findCheckLoop()
+    local ok, gc = pcall(getgc, false)
+    if not ok then return end
+    for _, f in ipairs(gc) do
+        if type(f) == "function" then
+            local okInfo, source, name = pcall(debug.info, f, "sn")
+            if okInfo and name == "checkLoop" and tostring(source):find("AfkController") then return f end
         end
-    end)
+    end
+end
+task.spawn(function()
+    local checkLoop
     while not closed do
         if antiAFK then
             setFocusCheck(false)
-            for _, c in ipairs(focusedConns) do pcall(c.Function) end
-            if markActive then pcall(markActive) end        else
+            checkLoop = checkLoop or findCheckLoop()
+            if checkLoop then
+                pcall(function()
+                    local now = os.clock()
+                    local updateRejoin = debug.getupvalue(checkLoop, 9)
+                    -- กันเกมอัปเดตแล้วลำดับ upvalue เปลี่ยน
+                    if type(debug.getupvalue(checkLoop, 4)) ~= "number" or type(updateRejoin) ~= "function"
+                        or type(debug.getupvalue(updateRejoin, 2)) ~= "number" then return end
+                    debug.setupvalue(checkLoop, 1, false)
+                    debug.setupvalue(checkLoop, 2, nil)
+                    debug.setupvalue(checkLoop, 4, now)
+                    debug.setupvalue(checkLoop, 5, false) -- เกมเห็น AFK ไม่ตรงแล้วส่ง Set(false) เอง
+                    debug.setupvalue(updateRejoin, 2, now)
+                    debug.setupvalue(updateRejoin, 3, nil)
+                end)
+            end
+        else
             setFocusCheck(true)
         end
-        task.wait(30)
+        task.wait(20)
     end
     setFocusCheck(true)
 end)
