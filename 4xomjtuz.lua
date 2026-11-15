@@ -1796,6 +1796,7 @@ function VaderUI:Destroy()
     pcall(saveProfile)
     closed = true
     State.AutoFish = false
+    if Env.SukjaiDrain then pcall(function() require(game:GetService("ReplicatedStorage").Shared.Config.FishingConfig).Reel.DrainRate = Env.SukjaiDrain end) end
     for _, connection in ipairs(Connections) do
         pcall(function() connection:Disconnect() end)
     end
@@ -1810,7 +1811,12 @@ local FishAction = RS.Remotes.Fishing.Action
 local FishEvent = RS.Remotes.Fishing.Event
 local Inv = RS.Remotes.Inventory
 local ItemRegistry = require(RS.Shared.ItemRegistry)
-local Cast = require(RS.Shared.Config.FishingConfig).Cast
+local FishingConfig = require(RS.Shared.Config.FishingConfig)
+local Cast = FishingConfig.Cast
+-- หลอดมินิเกมไม่ลด (ตาราง Reel ใช้ร่วมกับ FishingController ฝั่ง client)
+local ReelCfg = FishingConfig.Reel
+Env.SukjaiDrain = Env.SukjaiDrain or ReelCfg.DrainRate
+local function setNoDrain(on) ReelCfg.DrainRate = on and 0 or Env.SukjaiDrain end
 
 -- ปลากินเบ็ด -> Hook ทันที, เข้ามินิเกม -> Reel(true) ทันที (มินิเกมคำนวณฝั่ง client เซิร์ฟรับแค่ผล)
 track(FishEvent.OnClientEvent:Connect(function(kind)
@@ -1935,7 +1941,7 @@ local Tabs = {
 local FishSection = Tabs.Main:AddSection("Fishing")
 FishSection:AddToggle("AutoFish", {
     Title = "Auto Fish", Default = false,
-    Callback = function(value) State.AutoFish = value end,
+    Callback = function(value) State.AutoFish = value; setNoDrain(value) end,
 })
 local TpSection = Tabs.Teleport:AddSection("Teleport")
 TpSection:AddButton({
