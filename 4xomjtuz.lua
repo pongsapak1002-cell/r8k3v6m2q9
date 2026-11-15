@@ -2080,6 +2080,45 @@ track(Players.LocalPlayer.Idled:Connect(function()
         virtualUser:ClickButton2(Vector2.new())
     end)
 end))
+-- AfkController ของเกมนับแค่ input จริง (นิ่ง 18 นาที = วาปเซิร์ฟ, พับจอ = Away): เรียก handler InputBegan ของมันเองให้รีเซ็ตเวลา
+local UIS = game:GetService("UserInputService")
+local function afkConns(signal)
+    local list = {}
+    pcall(function()
+        for _, c in ipairs(getconnections(signal)) do
+            local f = c.Function
+            if f and tostring(debug.info(f, "s")):find("AfkController") then table.insert(list, c) end
+        end
+    end)
+    return list
+end
+local focusConns = afkConns(UIS.WindowFocusReleased)
+local function setFocusCheck(on)
+    for _, c in ipairs(focusConns) do pcall(function() if on then c:Enable() else c:Disable() end end) end
+end
+task.spawn(function()
+    -- WindowFocused ล้างสถานะ Away ก่อน แล้ว markActive ของเกมรีเซ็ตเวลานิ่ง
+    local focusedConns = afkConns(UIS.WindowFocused)
+    local markActive
+    pcall(function()
+        for _, f in ipairs(getgc(false)) do
+            if type(f) == "function" and islclosure(f) then
+                local source, name = debug.info(f, "sn")
+                if name == "markActive" and tostring(source):find("AfkController") then markActive = f break end
+            end
+        end
+    end)
+    while not closed do
+        if antiAFK then
+            setFocusCheck(false)
+            for _, c in ipairs(focusedConns) do pcall(c.Function) end
+            if markActive then pcall(markActive) end        else
+            setFocusCheck(true)
+        end
+        task.wait(30)
+    end
+    setFocusCheck(true)
+end)
 
 
 local secCommunity = Tabs.Settings:AddSection("Community & Support")
