@@ -1767,7 +1767,7 @@ local Env = (getgenv and getgenv()) or _G
 if Env.VaderMapStarter then pcall(function() Env.VaderMapStarter:Destroy() end) end
 
 local VaderUI = CreateVaderUI()
-local State = { AutoFish = false }
+local State = { AutoFish = false, ReelMode = "Follow" }
 local Connections = {}
 local closed = false
 local saveProfile = function() return false end
@@ -1818,14 +1818,37 @@ local ReelCfg = FishingConfig.Reel
 Env.SukjaiDrain = Env.SukjaiDrain or ReelCfg.DrainRate
 local function setNoDrain(on) ReelCfg.DrainRate = on and 0 or Env.SukjaiDrain end
 
--- ปลากินเบ็ด -> Hook ทันที, เข้ามินิเกม -> Reel(true) ทันที (มินิเกมคำนวณฝั่ง client เซิร์ฟรับแค่ผล)
+-- ปลากินเบ็ด -> Hook ทันที, เข้ามินิเกม -> Instant: Reel(true) ทันที / Follow: ให้กรอบตามปลา หลอดเต็มแล้วเกมยิง Reel(true) เอง
 track(FishEvent.OnClientEvent:Connect(function(kind)
     if not State.AutoFish then return end
     if kind == "Bite" then
         FishAction:FireServer("Hook")
-    elseif kind == "Reel" then
+    elseif kind == "Reel" and State.ReelMode == "Instant" then
         FishAction:FireServer("Reel", true)
     end
+end))
+
+-- Follow: state มินิเกมคือ upvalue 1 ของ stepMinigame ใน FishingController
+local stepMinigame
+local function findStepMinigame()
+    local ok, gc = pcall(getgc, false)
+    if not ok then return end
+    for _, f in ipairs(gc) do
+        if type(f) == "function" then
+            local okInfo, source, name = pcall(debug.info, f, "sn")
+            if okInfo and name == "stepMinigame" and tostring(source):find("FishingController") then return f end
+        end
+    end
+end
+track(game:GetService("RunService").Heartbeat:Connect(function()
+    if not (State.AutoFish and State.ReelMode == "Follow") then return end
+    stepMinigame = stepMinigame or findStepMinigame()
+    if not stepMinigame then return end
+    local ok, mg = pcall(debug.getupvalue, stepMinigame, 1)
+    if not ok or type(mg) ~= "table" or mg.Done or type(mg.FishX) ~= "number" then return end
+    local width = mg.ZoneWidth
+    mg.ZoneX = math.clamp(mg.FishX - width / 2, 0, 1 - width)
+    mg.ZoneVelocity = 0
 end))
 
 -- กันหลุด: มินิเกมของเกมยังวิ่งในเครื่องเรา หลอดหมดเมื่อไหร่มันยิง Reel(false) เอง ตัดทิ้งตอนเปิด Auto Fish
@@ -1942,6 +1965,10 @@ local FishSection = Tabs.Main:AddSection("Fishing")
 FishSection:AddToggle("AutoFish", {
     Title = "Auto Fish", Default = false,
     Callback = function(value) State.AutoFish = value; setNoDrain(value) end,
+})
+FishSection:AddDropdown("ReelMode", {
+    Title = "Reel Mode", Values = { "Follow", "Instant" }, Default = "Follow", Multi = false,
+    Callback = function(value) State.ReelMode = value end,
 })
 local TpSection = Tabs.Teleport:AddSection("Teleport")
 TpSection:AddButton({
